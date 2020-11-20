@@ -21,11 +21,11 @@ all: scream.bin scream.img
 	$(OBJCOPY) -O binary $< $@
 
 scream.img: scream.bin
-	$(MKIMAGE) -x -b 0x40B80000 -e 0x40B80000 -n scream -u 9 -i $< -o $@
+	$(MKIMAGE) -acx -b 0x40e00000 -l 0x8000 -e 0x8000 -n scream -u 7 -i $< -o $@
 
 scream.elf: scream.o
 	$(LD) $(LDFLAGS) scream.o -o $@
 
 
 clean:
-	rm -f *.o scream.elf scream.bin
+	rm -f *.o scream.elf scream.bin scream.img

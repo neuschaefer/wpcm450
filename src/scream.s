@@ -1,4 +1,3 @@
-
         # scream on the debug uart.
 
         mov     r0, #0xb8000000
