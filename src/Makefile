@@ -7,8 +7,10 @@ CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
 ASFLAGS :=
 MKIMAGE := ../tools/mkimage
+CFLAGS  := -Os -fno-builtin -nostdlib -Wall -Wno-unused-function -Wno-main
+LDFLAGS := -T monitor.ld
 
-all: scream.bin scream.img
+all: scream.img monitor.img
 
 
 %.o: %.s
@@ -20,12 +22,25 @@ all: scream.bin scream.img
 %.bin: %.elf
 	$(OBJCOPY) -O binary $< $@
 
-scream.img: scream.bin
-	$(MKIMAGE) -acx -b 0x40e00000 -l 0x8000 -e 0x8000 -n scream -u 7 -i $< -o $@
-
 scream.elf: scream.o
 	$(LD) $(LDFLAGS) scream.o -o $@
 
+bootscript.elf: bootscript.txt
+	cp bootscript.txt bootscript.tmp
+	printf '\0' >> bootscript.tmp
+	$(OBJCOPY) -I binary -O elf32-littlearm -B armv5t --rename-section .data=.bootscript bootscript.tmp $@
+	rm bootscript.tmp
+
+MONITOR_OBJS = start.o monitor.o bootscript.elf
+monitor.elf: $(MONITOR_OBJS) monitor.ld
+	$(LD) $(LDFLAGS) $(MONITOR_OBJS) -o $@
+
+scream.img: scream.bin
+	$(MKIMAGE) -acx -b 0x40e00000 -l 0x8000 -e 0x8000 -n scream -u 7 -i $< -o $@
+
+monitor.img: monitor.bin
+	$(MKIMAGE) -acx -b 0x40e00000 -l 0x8000 -e 0x8000 -n monitor -u 7 -i $< -o $@
 
 clean:
-	rm -f *.o scream.elf scream.bin scream.img
+	rm -f *.o scream.elf scream.bin scream.img \
+	          monitor.elf monitor.bin monitor.img bootscript.elf bootscript.tmp
