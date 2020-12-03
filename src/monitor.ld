@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 
 SECTIONS {
-	. = 0x00008000;
+	. = 0x06400000;
 
 	.text : {
 		*(.text*);
@@ -12,7 +12,7 @@ SECTIONS {
 		*(.data.rel.ro*);
 	}
 
-	. = 0x0000c000;
+	. = 0x06404000;
 	.bootscript : {
                 _bootscript = .;
 		*(.bootscript);

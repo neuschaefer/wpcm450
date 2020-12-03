@@ -36,10 +36,10 @@ monitor.elf: $(MONITOR_OBJS) monitor.ld
 	$(LD) $(LDFLAGS) $(MONITOR_OBJS) -o $@
 
 scream.img: scream.bin
-	$(MKIMAGE) -acx -b 0x40e00000 -l 0x8000 -e 0x8000 -n scream -u 7 -i $< -o $@
+	$(MKIMAGE) -acx -b 0x40b00000 -l 0x8000 -e 0x8000 -n scream -u 6 -i $< -o $@
 
 monitor.img: monitor.bin
-	$(MKIMAGE) -acx -b 0x40e00000 -l 0x8000 -e 0x8000 -n monitor -u 7 -i $< -o $@
+	$(MKIMAGE) -acx -b 0x40b00000 -l 0x6400000 -e 0x6400000 -n monitor -u 6 -i $< -o $@
 
 clean:
 	rm -f *.o scream.elf scream.bin scream.img \

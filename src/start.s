@@ -18,6 +18,9 @@ _start:
 	#bic	r0, #0xc0
 	#msr	cpsr, r0
 
+	adr	sp, _start
+	add	sp, #0x10000
+
 	bl	main
 loop:	b	loop
 
