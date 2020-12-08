@@ -1,0 +1,32 @@
+#!/usr/bin/python3
+# convert a binary into a script for lolmon
+# Usage: lolconv 0x1000 foo.bin
+import argparse
+import struct
+
+def write_words(base, data):
+    # Align the size to a multiple of four bytes
+    while len(data) % 4 != 0:
+        data += b'\0'
+
+    words = ['0x%08x' % struct.unpack('<I', data[i:i+4])[0]
+             for i in range(0, len(data), 4)]
+
+    stride = 4 # words per line
+    for i in range(0, len(words), stride):
+        addr = base + 4*i
+        print('ww   %x' % addr, ' '.join(words[i:i+stride]))
+
+if __name__ == '__main__':
+    ap = argparse.ArgumentParser(description='Convert a binary into a script for lolmon')
+    ap.add_argument('base', help='base address')
+    ap.add_argument('file', help='binary file to load and run')
+    args = ap.parse_args()
+
+    base = int(args.base, 16)
+    with open(args.file, 'rb') as f:
+        data = f.read()
+
+    print('# %s' % args.file)
+    write_words(base, data)
+    print('call %x' % base)

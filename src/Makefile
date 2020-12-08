@@ -7,10 +7,11 @@ CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
 ASFLAGS :=
 MKIMAGE := ../tools/mkimage
+LOLCONV := ../tools/lolconv
 CFLAGS  := -Os -fno-builtin -nostdlib -Wall -Wno-unused-function -Wno-main
 LDFLAGS := -T monitor.ld
 
-all: scream.img monitor.img
+all: scream.img monitor.img tlbtest.lol
 
 
 %.o: %.s
@@ -22,8 +23,15 @@ all: scream.img monitor.img
 %.bin: %.elf
 	$(OBJCOPY) -O binary $< $@
 
+%.lol: %.bin
+	$(LOLCONV) 0x10000 $< > $@
+	cat $@
+
 scream.elf: scream.o
-	$(LD) $(LDFLAGS) scream.o -o $@
+	$(LD) $(LDFLAGS) $< -o $@
+
+tlbtest.elf: tlbtest.o
+	$(LD) $(LDFLAGS) $< -o $@
 
 bootscript.elf: bootscript.txt
 	cp bootscript.txt bootscript.tmp
