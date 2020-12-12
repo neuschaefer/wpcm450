@@ -11,7 +11,7 @@ LOLCONV := ../tools/lolconv
 CFLAGS  := -Os -fno-builtin -nostdlib -Wall -Wno-unused-function -Wno-main
 LDFLAGS := -T monitor.ld
 
-all: scream.img monitor.img tlbtest.lol
+all: scream.img monitor.img tlbtest.lol getuartdiv.lol
 
 
 %.o: %.s
@@ -27,10 +27,7 @@ all: scream.img monitor.img tlbtest.lol
 	$(LOLCONV) 0x10000 $< > $@
 	cat $@
 
-scream.elf: scream.o
-	$(LD) $(LDFLAGS) $< -o $@
-
-tlbtest.elf: tlbtest.o
+%.elf: %.o
 	$(LD) $(LDFLAGS) $< -o $@
 
 bootscript.elf: bootscript.txt
