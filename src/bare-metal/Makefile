@@ -6,8 +6,8 @@ AS := $(CROSS_COMPILE)as
 CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
 ASFLAGS :=
-MKIMAGE := ../tools/mkimage
-LOLCONV := ../tools/lolconv
+MKIMAGE := ../../tools/mkimage
+LOLCONV := ../../tools/lolconv
 CFLAGS  := -Os -fno-builtin -nostdlib -Wall -Wno-unused-function -Wno-main
 LDFLAGS := -T monitor.ld
 

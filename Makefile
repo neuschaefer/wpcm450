@@ -1,5 +1,5 @@
 src: tools
-	+$(MAKE) -C src
+	+$(MAKE) -C src/bare-metal
 
 tools:
 	+$(MAKE) -C tools
