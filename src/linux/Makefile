@@ -7,7 +7,9 @@ CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
 CFLAGS := -Wall -static -Os
 
-all: memscan
+PROGRAMS = memscan
+
+all: $(PROGRAMS)
 
 clean:
-	rm -f memscan
+	rm -f $(PROGRAMS)

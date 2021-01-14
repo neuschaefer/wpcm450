@@ -25,7 +25,7 @@ struct state {
 };
 
 /* Initialize the state */
-void init(struct state *state, const char *base, const char *size) {
+static void init(struct state *state, const char *base, const char *size) {
 	state->base = strtoul(base, NULL, 0);
 	state->size = strtoul(size, NULL, 0);
 	if (size == 0) {
@@ -33,7 +33,17 @@ void init(struct state *state, const char *base, const char *size) {
 		exit(EXIT_FAILURE);
 	}
 
+	if ((state->base & 0xfff) || (state->size & 0xfff)) {
+		/* TODO: handle this case properly */
+		printf("Base or size is not 4k-aligned. Exiting.\n");
+		exit(EXIT_FAILURE);
+	}
+
 	state->copy = malloc(state->size);
+	if (!state->copy) {
+		perror("Failed to allocate buffer");
+		exit(EXIT_FAILURE);
+	}
 
 	int fd = open("/dev/mem", O_RDONLY);
 	if (fd < 0) {
@@ -53,7 +63,7 @@ void init(struct state *state, const char *base, const char *size) {
 }
 
 /* Compare two chunks of memory */
-void compare(off_t addr, uint8_t *a, uint8_t *b, size_t size) {
+static void compare(off_t addr, uint8_t *a, uint8_t *b, size_t size) {
 	if (memcmp(a, b, size) == 0) {
 		return;
 	}
@@ -71,7 +81,7 @@ void compare(off_t addr, uint8_t *a, uint8_t *b, size_t size) {
 }
 
 /* One round of scanning the memory */
-void scan(struct state *state) {
+static void scan(struct state *state) {
 	uint8_t buf[4096];
 
 	for (off_t off = 0; off < state->size; off += sizeof(buf)) {
