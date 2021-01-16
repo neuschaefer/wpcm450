@@ -46,17 +46,46 @@ static char uart_rx(void)
 }
 
 
-/* Timestamp driver */
+/* Timer driver */
 
-static uint32_t read_tsc(void)
+#define TIMER_BASE	0xb8001000
+#define TCSR0		(TIMER_BASE + 0x00)
+#define TICR0		(TIMER_BASE + 0x08)
+#define TDR0		(TIMER_BASE + 0x10)
+
+static bool timer_is_active()
 {
-	//return read32(0xXXXXXXXX); TODO
-	return 0;
+	return !!(read32(TCSR0) & (1 << 25));
 }
 
-static uint32_t since(uint32_t then)
+static void start_timer(uint32_t usecs)
 {
-	return read_tsc() - then;
+	/* Reset timer 0 */
+	write32(TCSR0, 1 << 26);
+
+	/* Set initial count */
+	write32(TICR0, usecs / 10);
+
+	/*
+	 * Assuming the input clock runs at 24 MHz, set the prescaler to 240 to
+	 * let the timer decrement at 0.1 MHz.
+	 */
+	uint32_t tcsr = 240 - 1;
+
+	/* Enable */
+	tcsr |= 1 << 30;
+
+	write32(TCSR0, tcsr);
+
+	/* Wait for the timer to become active */
+	while (!timer_is_active())
+		;
+}
+
+static bool timeout()
+{
+	/* Timeout is reached when the timer is not active anymore */
+	return !timer_is_active();
 }
 
 
@@ -653,9 +682,9 @@ static void source(const char *script)
 
 static bool wait_for_key(uint32_t us)
 {
-	uint32_t beginning = read_tsc();
+	start_timer(us);
 
-	while (since(beginning) < us)
+	while (!timeout())
 		if (uart_can_rx())
 			return true;
 
@@ -667,10 +696,10 @@ void main(void)
 {
 	char line[128];
 
-	//puts("Press any key to avoid running the default boot script");
-	//if (!wait_for_key(1000000)) {
-	//	source(_bootscript);
-	//}
+	puts("Press any key to avoid running the default boot script");
+	if (!wait_for_key(1000000)) {
+		source(_bootscript);
+	}
 
 	puts("Welcome to lolmon");
 	while(1) {
