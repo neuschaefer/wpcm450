@@ -1,4 +1,4 @@
 # Load and run Linux
 echo Loading Linux...
-cw   40b80000 8000 120000
-#call 8000 0 0xffffffff 0    # doesn't work yet
+cw   40b80000 8000 0x120000
+call 8000 0 0xffffffff 0

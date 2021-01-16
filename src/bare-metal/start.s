@@ -18,6 +18,13 @@ _start:
 	#bic	r0, #0xc0
 	#msr	cpsr, r0
 
+	# Disable data cache and MMU
+	mrc	p15, 0, r0, c1, c0, 0
+	#bic	r0, #4  @ DCache
+	bic	r0, #1  @ MMU
+	mcr	p15, 0, r0, c1, c0, 0
+
+	# Set the stack pointer
 	adr	sp, _start
 	add	sp, #0x10000
 
@@ -40,8 +47,8 @@ dcache_loop:
 	mcr	p15, 0, r0, c7, c10, 4
 
 	# 9.2.3 Synchronize data and instruction streams in level two AHB subsystems
-	# no idea really, but let's read from uncached memory
-	mov	r0, #0x40000000
+	# no idea really, but let's read from uncached memory (TODO)
+	mov	r0, #0x00000000  // not sure if uncached
 	ldr	r0, [r0]
 
 	# 9.2.4 Invalidate the ICache
