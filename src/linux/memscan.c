@@ -78,6 +78,7 @@ static void compare(off_t addr, uint8_t *a, uint8_t *b, size_t size) {
 			printf("\n");
 		}
 	}
+	fflush(stdout);
 }
 
 /* One round of scanning the memory */
@@ -102,6 +103,7 @@ int main(int argc, char **argv) {
 	init(&state, argv[1], argv[2]);
 
 	printf("Scanning at %08lx:%08x\n", state.base, state.size);
+	fflush(stdout);
 	while (true) {
 		scan(&state);
 	}

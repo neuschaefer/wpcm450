@@ -7,7 +7,7 @@ CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
 CFLAGS := -Wall -static -Os
 
-PROGRAMS = memscan
+PROGRAMS = memscan gpiodump power
 
 all: $(PROGRAMS)
 
