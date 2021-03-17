@@ -52,6 +52,7 @@ static char uart_rx(void)
 #define TCSR0		(TIMER_BASE + 0x00)
 #define TICR0		(TIMER_BASE + 0x08)
 #define TDR0		(TIMER_BASE + 0x10)
+#define WTCR		(TIMER_BASE + 0x1c)
 
 static bool timer_is_active()
 {
@@ -86,6 +87,11 @@ static bool timeout()
 {
 	/* Timeout is reached when the timer is not active anymore */
 	return !timer_is_active();
+}
+
+static void watchdog_reset()
+{
+	write32(WTCR, 0x82);
 }
 
 
@@ -470,6 +476,27 @@ static void cmd_src(int argc, char **argv)
 	source((const char *)script);
 }
 
+static void cmd_reset(int argc, char **argv)
+{
+	if (argc != 1) {
+		puts("Usage error");
+		return;
+	}
+
+	watchdog_reset();
+}
+
+extern const char _bootscript[];
+static void cmd_boot(int argc, char **argv)
+{
+	if (argc != 1) {
+		puts("Usage error");
+		return;
+	}
+
+	source(_bootscript);
+}
+
 static void cmd_help(int argc, char **argv);
 static const struct command commands[] = {
 	{ "help", "[command]", "Show help output for one or all commands", cmd_help },
@@ -486,6 +513,8 @@ static const struct command commands[] = {
 	{ "imb", "", "Instruction memory barrier", cmd_imb },
 	{ "call", "address [up to 3 args]", "Call a function by address", cmd_call },
 	{ "src", "address", "Source/run script at address", cmd_src },
+	{ "rst", "", "Perform a system reset", cmd_reset },
+	{ "boot", "", "Continue with the usual boot flow", cmd_boot },
 };
 
 static const struct command *find_command(const char *name)
@@ -691,7 +720,6 @@ static bool wait_for_key(uint32_t us)
 	return false;
 }
 
-extern const char _bootscript[];
 void main(void)
 {
 	char line[128];
