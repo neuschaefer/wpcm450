@@ -15,13 +15,15 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#define PAGE 4096ul /* an assumption that will hopefully not bite me. */
+#define PAGE_MASK (PAGE - 1)
 
 /* The state of the program */
 struct state {
 	off_t base;	/* Base address of area to scan */
 	size_t size;	/* Size of area to scan */
 	uint8_t *copy;	/* Buffer for copy of data */
-	uint8_t *map;	/* Mapping */
+	uint8_t *map;	/* Mapping (page-aligned) */
 };
 
 /* Initialize the state */
@@ -33,11 +35,12 @@ static void init(struct state *state, const char *base, const char *size) {
 		exit(EXIT_FAILURE);
 	}
 
-	if ((state->base & 0xfff) || (state->size & 0xfff)) {
-		/* TODO: handle this case properly */
-		printf("Base or size is not 4k-aligned. Exiting.\n");
-		exit(EXIT_FAILURE);
-	}
+	off_t start = state->base;
+	off_t end = state->base + state->size;
+
+	/* Align start and end to page boundaries for the purposes of mmap */
+	start &= ~PAGE_MASK;
+	end = (end + PAGE - 1) & ~PAGE_MASK;
 
 	state->copy = malloc(state->size);
 	if (!state->copy) {
@@ -51,7 +54,7 @@ static void init(struct state *state, const char *base, const char *size) {
 		exit(EXIT_FAILURE);
 	}
 
-	state->map = mmap(NULL, state->size, PROT_READ, MAP_SHARED, fd, state->base);
+	state->map = mmap(NULL, end - start, PROT_READ, MAP_SHARED, fd, start);
 	if (state->map == MAP_FAILED) {
 		perror("Failed to map /dev/mem");
 		exit(EXIT_FAILURE);
@@ -59,7 +62,7 @@ static void init(struct state *state, const char *base, const char *size) {
 
 	close(fd);
 
-	memcpy(state->copy, state->map, state->size);
+	memcpy(state->copy, state->map + (state->base & PAGE_MASK), state->size);
 }
 
 /* Compare two chunks of memory */
@@ -81,14 +84,29 @@ static void compare(off_t addr, uint8_t *a, uint8_t *b, size_t size) {
 	fflush(stdout);
 }
 
+/* Read from IO memory */
+void ioread(void *dest, const void *src, size_t n)
+{
+	uint32_t *d = dest;
+	volatile const uint32_t *s = src;
+
+	for (size_t i = 0; i < n; i += 4)
+		*d++ = *s++;
+}
+
+#define min(a, b)	(((a) < (b))? (a) : (b))
+
 /* One round of scanning the memory */
 static void scan(struct state *state) {
-	uint8_t buf[4096];
+	uint8_t buf[PAGE];
+	uint8_t *map = state->map + (state->base & PAGE_MASK);
 
 	for (off_t off = 0; off < state->size; off += sizeof(buf)) {
-		memcpy(buf, state->map + off, sizeof(buf));
-		compare(state->base + off, state->copy + off, buf, sizeof(buf));
-		memcpy(state->copy + off, buf, sizeof(buf));
+		size_t chunk = min(sizeof(buf), state->size - off);
+
+		ioread(buf, map + off, chunk);
+		compare(state->base + off, state->copy + off, buf, chunk);
+		memcpy(state->copy + off, buf, chunk);
 	}
 }
 
