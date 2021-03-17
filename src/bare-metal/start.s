@@ -24,9 +24,29 @@ _start:
 	bic	r0, #1  @ MMU
 	mcr	p15, 0, r0, c1, c0, 0
 
-	# Set the stack pointer
-	adr	sp, _start
-	add	sp, #0x10000
+	# Set the stack pointer to the end of internal RAM @ 0x0
+	mov	sp, #0x2000
+
+	# lolmon to internal RAM @ 0x0
+	adr	r0, _start
+	mov	r1, #0
+	mov	r2, #0x2000
+copy:
+	ldr	r3, [r0], #4
+	ldr	r4, [r0], #4
+	ldr	r5, [r0], #4
+	ldr	r6, [r0], #4
+	str	r3, [r1], #4
+	str	r4, [r1], #4
+	str	r5, [r1], #4
+	str	r6, [r1], #4
+	subs	r2, #16
+	bne	copy
+
+	# Switch to internal RAM, in order to be independent from DRAM
+	ldr	r0, =welcome_to_iram
+	bx	r0
+welcome_to_iram:
 
 	bl	main
 loop:	b	loop
