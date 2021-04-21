@@ -2,8 +2,10 @@
 
 - [tools](./tools/): Tools that run on any workstation
 - [src](./src/): Code that can run on the BMC
-  - [monitor](./src/monitor.c): A [machine monitor](https://en.wikipedia.org/wiki/Machine_code_monitor)
+  - [bare-metal/monitor](./src/bare-metal/monitor.c): A [machine monitor](https://en.wikipedia.org/wiki/Machine_code_monitor)
     program that lets you peek, poke and copy memory, as well as run code.
+    It can also act as a primitive bootloader.
+  - [linux](./src/linux): Tools that run under Linux
 - My Linux patches are in [neuschaefer/linux](https://github.com/neuschaefer/linux/tree/wpcm)
 
 Hardware documentation is [in the wiki](https://github.com/neuschaefer/wpcm450/wiki/).
