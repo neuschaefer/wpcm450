@@ -9,3 +9,8 @@
 - My Linux patches are in [neuschaefer/linux](https://github.com/neuschaefer/linux/tree/wpcm)
 
 Hardware documentation is [in the wiki](https://github.com/neuschaefer/wpcm450/wiki/).
+
+
+To discuss a specific mainboard, please find the corresponding
+[issue](https://github.com/neuschaefer/wpcm450/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+board%22)
+or open a new one.
