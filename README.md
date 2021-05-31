@@ -15,4 +15,5 @@ To discuss a specific mainboard, please find the corresponding
 [issue](https://github.com/neuschaefer/wpcm450/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+board%22)
 or open a new one.
 
-If you want to talk on IRC, join `##ehh` on [Libera.Chat](https://libera.chat).
+If you want to talk on IRC, join [`##ehh`](https://web.libera.chat/##ehh)
+on [Libera.Chat](https://libera.chat).
