@@ -582,7 +582,8 @@ beginning:
 		char c = getchar();
 
 		switch ((uint8_t)c) {
-		case 0x7f: /* backspace */
+		case 0x08: /* backspace */
+		case 0x7f:
 			if (cursor) {
 				cursor--;
 				putstr("\10 \10");
