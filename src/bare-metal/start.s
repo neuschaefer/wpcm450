@@ -2,6 +2,29 @@
 
 .global _start
 _start:
+	# Exception vector:
+	b	reset		@ 0x0000: Reset
+	bl	exception	@ 0x0004: Undefined
+	bl	exception	@ 0x0008: SWI
+	bl	exception	@ 0x000c: Prefetch abort
+	bl	exception	@ 0x0010: Data abort
+	bl	exception	@ 0x0014: reserved
+	bl	exception	@ 0x0018: IRQ
+	bl	exception	@ 0x001c: FIQ
+exception:
+	mov	r0, lr		@ save exception vector offset
+	sub	r0, #4
+
+	mrs	r1, cpsr	@ switch to supervisor mode
+	bic	r1, #0x1f
+	orr	r1, #0x13
+	msr	cpsr, r1
+
+	mov	sp, #0x2000
+	bl	handle_exception
+	b	loop
+
+reset:
 	# Lets mostly follow https://www.kernel.org/doc/Documentation/arm/Booting
 	# to make sure that Linux boots
 	# - CPU mode
@@ -18,10 +41,11 @@ _start:
 	#bic	r0, #0xc0
 	#msr	cpsr, r0
 
-	# Disable data cache and MMU
+	# Disable data cache and MMU, use low vector base
 	mrc	p15, 0, r0, c1, c0, 0
-	#bic	r0, #4  @ DCache
-	bic	r0, #1  @ MMU
+	#bic	r0, #4      @ DCache
+	bic	r0, #1      @ MMU
+	bic	r0, #0x2000 @ low vectors (@0x00000000)
 	mcr	p15, 0, r0, c1, c0, 0
 
 	# Set the stack pointer to the end of internal RAM @ 0x0
@@ -44,6 +68,7 @@ copy:
 	bne	copy
 
 	# Switch to internal RAM, in order to be independent from DRAM
+	bl	instruction_memory_barrier
 	ldr	r0, =welcome_to_iram
 	bx	r0
 welcome_to_iram:

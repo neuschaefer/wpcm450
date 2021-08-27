@@ -721,18 +721,40 @@ static bool wait_for_key(uint32_t us)
 	return false;
 }
 
-void main(void)
+static void main_loop(void)
 {
 	char line[128];
 
+	while(1) {
+		edit_line(line, sizeof(line));
+		execute_line(line);
+	}
+}
+
+void main(void)
+{
 	puts("Press any key to avoid running the default boot script");
 	if (!wait_for_key(1000000)) {
 		source(_bootscript);
 	}
 
 	puts("Welcome to lolmon");
-	while(1) {
-		edit_line(line, sizeof(line));
-		execute_line(line);
-	}
+	main_loop();
+}
+
+void handle_exception(int number)
+{
+	static const char *const names[8] = {
+		"Reset", "Undefined", "SWI", "Prefetch abort",
+		"Data abort", "reserved", "IRQ", "FIQ",
+	};
+
+	putchar('\n');
+	putstr("Exception ");
+	put_hex8(number);
+	putstr(", ");
+	putstr(names[(number >> 2) & 7]);
+	putchar('\n');
+
+	main_loop();
 }
