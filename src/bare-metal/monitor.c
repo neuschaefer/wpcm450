@@ -631,6 +631,10 @@ static size_t tokenize_line(char *line, char **argv, size_t argv_length)
 
 	for (char *p = line; *p && argv_index < argv_length; p++) {
 		char c = *p;
+		
+		/* Find the beginning of a comment, ignore all word after */
+		if(c == '#')
+			break;
 
 		switch (state) {
 		case IDLE:
