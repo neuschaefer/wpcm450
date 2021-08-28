@@ -668,9 +668,6 @@ static void execute_line(char *line)
 	int argc;
 	const struct command *cmd;
 
-	if (line[0] == '#')
-		return;
-
 	argc = tokenize_line(line, argv, ARRAY_LENGTH(argv));
 	if (argc == 0)
 		return;
