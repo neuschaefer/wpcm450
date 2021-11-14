@@ -1,6 +1,5 @@
 #define _GNU_SOURCE
 #include <stdarg.h>
-#include <sys/ioctl.h>
 #include <dlfcn.h>
 #include <stdio.h>
 #include <errno.h>
@@ -20,13 +19,26 @@
 
 struct mem_info {
 	uint32_t base_addr;
-	uint32_t region_size;
+	uint16_t region_size;
 	uint16_t offset;
 	void *data_ptr;
 	uint16_t data_size;
 	uint8_t data_width;
 	uint8_t id;
 };
+
+FILE *log_stream = NULL;
+
+void msg(const char *fmt, ...)
+{
+	va_list ap;
+
+	if (log_stream) {
+		va_start(ap, fmt);
+		vfprintf(log_stream, fmt, ap);
+		va_end(ap);
+	}
+}
 
 static void memdump(struct mem_info *mem)
 {
@@ -38,15 +50,15 @@ static void memdump(struct mem_info *mem)
 	switch (mem->data_width) {
 	case WIDTH_8:
 		for (i = 0; i < mem->data_size; i++)
-			printf(" %02x", p8[i]);
+			msg(" %02x", p8[i]);
 		break;
 	case WIDTH_16:
 		for (i = 0; i < mem->data_size; i++)
-			printf(" %04x", p16[i]);
+			msg(" %04x", p16[i]);
 		break;
 	case WIDTH_32:
 		for (i = 0; i < mem->data_size; i++)
-			printf(" %08x", p32[i]);
+			msg(" %08x", p32[i]);
 		break;
 	}
 }
@@ -55,20 +67,20 @@ static void trace_mem(int request, struct mem_info *mem)
 {
 	switch(request) {
 	case MEM_REQUEST:
-		printf("REQ%3d %08x:%08x\n", mem->id, mem->base_addr, mem->region_size);
+		msg("MEM.REQ%3d %08x:%04x\n", mem->id, mem->base_addr, mem->region_size);
 		break;
 	case MEM_RELEASE:
-		printf("REL%3d %08x:%08x\n", mem->id, mem->base_addr, mem->region_size);
+		msg("MEM.REL%3d %08x:%04x\n", mem->id, mem->base_addr, mem->region_size);
 		break;
 	case MEM_READ:
-		printf("RD %3d %04x ->", mem->id, mem->offset);
+		msg("MEM.RD %3d %04x -> [%2d]", mem->id, mem->offset, mem->data_size);
 		memdump(mem);
-		printf("\n");
+		msg("\n");
 		break;
 	case MEM_WRITE:
-		printf("WR %3d %04x <-", mem->id, mem->offset);
+		msg("MEM.WR %3d %04x <- [%2d]", mem->id, mem->offset, mem->data_size);
 		memdump(mem);
-		printf("\n");
+		msg("\n");
 		break;
 	}
 }
@@ -84,10 +96,9 @@ int ioctl(int fd, unsigned long request, ...)
 
 	int res = syscall(SYS_ioctl, fd, request, arg);
 
+	msg("ioctl(%d, %08lx, %08lx)\n", fd, request, arg);
 	if (IS_MEM_REQ(request))
 		trace_mem(request, (struct mem_info *)arg);
-	else
-		printf("ioctl(%d, %08lx, %08lx)\n", fd, request, arg);
 
 	return res;
 }
@@ -95,8 +106,7 @@ int ioctl(int fd, unsigned long request, ...)
 static void init_trace(void) __attribute__((constructor));
 static void init_trace(void)
 {
-	// Line buffered mode, so that everything prints out nicely
-	setvbuf(stdout, NULL, _IOLBF, 0);
+	log_stream = fopen("/tmp/trace.log", "w");
 
-	printf("Hello from trace.so\n");
+	msg("Hello from trace.so\n");
 }
