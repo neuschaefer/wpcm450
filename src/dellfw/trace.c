@@ -11,25 +11,11 @@
 
 #define ARRAY_LENGTH(x)	(sizeof(x) / sizeof((x)[0]))
 
-#define IS_MEM_REQ(x)	(((x) & ~0xff) == 0xc004b400)
+#define IS_MEM(x)	(((x) & ~0xff) == 0xc004b400)
 #define MEM_READ	0xc004b401
 #define MEM_WRITE	0xc004b402
 #define MEM_REQUEST	0xc004b403
 #define MEM_RELEASE	0xc004b404
-
-#define WIDTH_8		0
-#define WIDTH_16	1
-#define WIDTH_32	2
-
-struct mem_info {
-	uint32_t base_addr;
-	uint16_t region_size;
-	uint16_t offset;
-	void *data_ptr;
-	uint16_t data_size;
-	uint8_t data_width;
-	uint8_t id;
-};
 
 FILE *log_stream = NULL;
 
@@ -63,6 +49,20 @@ void cont(const char *fmt, ...)
 }
 
 
+#define MEM_WIDTH_8	0
+#define MEM_WIDTH_16	1
+#define MEM_WIDTH_32	2
+
+struct mem_info {
+	uint32_t base_addr;
+	uint16_t region_size;
+	uint16_t offset;
+	void *data_ptr;
+	uint16_t data_size;
+	uint8_t data_width;
+	uint8_t id;
+};
+
 static void memdump(struct mem_info *mem)
 {
 	uint8_t *p8 = mem->data_ptr;
@@ -71,15 +71,15 @@ static void memdump(struct mem_info *mem)
 	int i;
 
 	switch (mem->data_width) {
-	case WIDTH_8:
+	case MEM_WIDTH_8:
 		for (i = 0; i < mem->data_size; i++)
 			cont(" %02x", p8[i]);
 		break;
-	case WIDTH_16:
+	case MEM_WIDTH_16:
 		for (i = 0; i < mem->data_size; i++)
 			cont(" %04x", p16[i]);
 		break;
-	case WIDTH_32:
+	case MEM_WIDTH_32:
 		for (i = 0; i < mem->data_size; i++)
 			cont(" %08x", p32[i]);
 		break;
@@ -136,7 +136,7 @@ int ioctl(int fd, unsigned long request, ...)
 
 	int res = syscall(SYS_ioctl, fd, request, arg);
 
-	if (IS_MEM_REQ(request))
+	if (IS_MEM(request))
 		trace_mem(request, (struct mem_info *)arg);
 	else
 		msg("UNK.ioctl(%d, %08lx, %08lx)\n", fd, request, arg);
