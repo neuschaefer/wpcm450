@@ -23,3 +23,8 @@ fix the binary with `patchelf --replace-needed libc.so libc.so.6 trace.so`.
 - `killall fullfw && LD_PRELOAD=/path/to/trace.so fullfw`
 - TODO: appease the `AppMonitor`
 - read traces from `/tmp/trace*.log`
+
+
+## References
+
+- [Kernel module source code for iDRAC6 1.70](https://github.com/neuschaefer/linux/tree/vendor/dell-idrac6-1.70/drivers/dell)
