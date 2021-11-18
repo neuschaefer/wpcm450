@@ -1,11 +1,15 @@
+// SPDX-License-Identifier: MIT
+// trace.so - an ioctl tracer for iDRAC6's fullfw process
 #define _GNU_SOURCE
-#include <stdarg.h>
-#include <dlfcn.h>
-#include <stdio.h>
 #include <errno.h>
-#include <sys/syscall.h>
-#include <unistd.h>
+#include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <sys/syscall.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#define ARRAY_LENGTH(x)	(sizeof(x) / sizeof((x)[0]))
 
 #define IS_MEM_REQ(x)	(((x) & ~0xff) == 0xc004b400)
 #define MEM_READ	0xc004b401
@@ -29,7 +33,25 @@ struct mem_info {
 
 FILE *log_stream = NULL;
 
+// A new message
 void msg(const char *fmt, ...)
+{
+	va_list ap;
+	struct timeval tv;
+
+	if (log_stream) {
+		gettimeofday(&tv, NULL);
+		fprintf(log_stream, "[%6lu.%03ld] ",
+				(unsigned long)tv.tv_sec % 1000000, tv.tv_usec / 1000);
+
+		va_start(ap, fmt);
+		vfprintf(log_stream, fmt, ap);
+		va_end(ap);
+	}
+}
+
+// A continuation of a previous message
+void cont(const char *fmt, ...)
 {
 	va_list ap;
 
@@ -39,6 +61,7 @@ void msg(const char *fmt, ...)
 		va_end(ap);
 	}
 }
+
 
 static void memdump(struct mem_info *mem)
 {
@@ -50,17 +73,33 @@ static void memdump(struct mem_info *mem)
 	switch (mem->data_width) {
 	case WIDTH_8:
 		for (i = 0; i < mem->data_size; i++)
-			msg(" %02x", p8[i]);
+			cont(" %02x", p8[i]);
 		break;
 	case WIDTH_16:
 		for (i = 0; i < mem->data_size; i++)
-			msg(" %04x", p16[i]);
+			cont(" %04x", p16[i]);
 		break;
 	case WIDTH_32:
 		for (i = 0; i < mem->data_size; i++)
-			msg(" %08x", p32[i]);
+			cont(" %08x", p32[i]);
 		break;
 	}
+}
+
+static unsigned long bases[32];
+
+static void save_base(const struct mem_info *mem) {
+	if (mem->id < ARRAY_LENGTH(bases))
+		bases[mem->id] = mem->base_addr;
+}
+
+static unsigned long get_address(const struct mem_info *mem) {
+	unsigned long base = 0;
+
+	if (mem->id < ARRAY_LENGTH(bases))
+		base = bases[mem->id];
+
+	return base + mem->offset;
 }
 
 static void trace_mem(int request, struct mem_info *mem)
@@ -68,19 +107,20 @@ static void trace_mem(int request, struct mem_info *mem)
 	switch(request) {
 	case MEM_REQUEST:
 		msg("MEM.REQ%3d %08x:%04x\n", mem->id, mem->base_addr, mem->region_size);
+		save_base(mem);
 		break;
 	case MEM_RELEASE:
 		msg("MEM.REL%3d %08x:%04x\n", mem->id, mem->base_addr, mem->region_size);
 		break;
 	case MEM_READ:
-		msg("MEM.RD %3d %04x -> [%2d]", mem->id, mem->offset, mem->data_size);
+		msg("MEM.RD %3d %08x -> [%2d]", mem->id, get_address(mem), mem->data_size);
 		memdump(mem);
-		msg("\n");
+		cont("\n");
 		break;
 	case MEM_WRITE:
-		msg("MEM.WR %3d %04x <- [%2d]", mem->id, mem->offset, mem->data_size);
+		msg("MEM.WR %3d %08x <- [%2d]", mem->id, get_address(mem), mem->data_size);
 		memdump(mem);
-		msg("\n");
+		cont("\n");
 		break;
 	}
 }
@@ -96,9 +136,10 @@ int ioctl(int fd, unsigned long request, ...)
 
 	int res = syscall(SYS_ioctl, fd, request, arg);
 
-	msg("ioctl(%d, %08lx, %08lx)\n", fd, request, arg);
 	if (IS_MEM_REQ(request))
 		trace_mem(request, (struct mem_info *)arg);
+	else
+		msg("UNK.ioctl(%d, %08lx, %08lx)\n", fd, request, arg);
 
 	return res;
 }
@@ -106,7 +147,10 @@ int ioctl(int fd, unsigned long request, ...)
 static void init_trace(void) __attribute__((constructor));
 static void init_trace(void)
 {
-	log_stream = fopen("/tmp/trace.log", "w");
+	char filename[100];
+
+	snprintf(filename, sizeof(filename), "/tmp/trace-%d.log", getpid());
+	log_stream = fopen(filename, "w");
 
 	msg("Hello from trace.so\n");
 }

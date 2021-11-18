@@ -22,4 +22,4 @@ fix the binary with `patchelf --replace-needed libc.so libc.so.6 trace.so`.
   `make uuencode` and `uudecode && gunzip trace.so.gz`.
 - `killall fullfw && LD_PRELOAD=/path/to/trace.so fullfw`
 - TODO: appease the `AppMonitor`
-- read traces from `/tmp/trace.log`
+- read traces from `/tmp/trace*.log`
