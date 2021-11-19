@@ -11,55 +11,58 @@
 
 #define ARRAY_LENGTH(x)	(sizeof(x) / sizeof((x)[0]))
 
-#define IS_MEM(x)	(((x) & ~0xff) == 0xc004b400)
-#define MEM_READ	0xc004b401
-#define MEM_WRITE	0xc004b402
-#define MEM_REQUEST	0xc004b403
-#define MEM_RELEASE	0xc004b404
+#define IOCTL_TYPE(x)	(((x) & 0xff00) >> 8)
+#define IOCTL_TYPENR(x)	((x) & 0xffff)
 
-#define IS_IRQ(x)	(((x) & ~0xff) == 0xc004b900)
-#define IRQ_DRV_INIT	0xc004b900
-#define IRQ_DYN_INIT	0xc004b901
-#define IRQ_DYN_CONFIG	0xc004b902
-#define IRQ_DYN_CLEAR	0xc004b903
-#define IRQ_GEN_INIT	0xc004b904
-#define IRQ_UM_ISRID	0xc004b905
+#define TYPE_MEM	0xb4
+#define MEM_READ	0xb401
+#define MEM_WRITE	0xb402
+#define MEM_REQUEST	0xb403
+#define MEM_RELEASE	0xb404
 
-#define IS_GPIO(x)	(((x) & ~0xff) == 0xc004b500)
-#define GPIO_READ	0xc004b500
-#define GPIO_WRITE	0xc004b501
-#define GPIO_CONFIG	0xc004b502
+#define TYPE_IRQ	0xb9
+#define IRQ_DRV_INIT	0xb900
+#define IRQ_DYN_INIT	0xb901
+#define IRQ_DYN_CONFIG	0xb902
+#define IRQ_DYN_CLEAR	0xb903
+#define IRQ_GEN_INIT	0xb904
+#define IRQ_UM_ISRID	0xb905
 
-#define IS_I2C(x)	(((x) & ~0xff) == 0xc014b700)
-#define I2C_INIT	0xc014b700
-#define I2C_CONFIG	0xc014b701
-#define I2C_WRITE	0xc014b702
-#define I2C_GET_MSG	0xc014b703
-#define I2C_RESET	0xc014b704
-#define I2C_GET_STAT	0xc014b705
-#define I2C_GET_HWSTAT	0xc014b706
-#define I2C_CTRL_HW	0xc014b707
+#define TYPE_GPIO	0xb5
+#define GPIO_READ	0xb500
+#define GPIO_WRITE	0xb501
+#define GPIO_CONFIG	0xb502
 
-#define IS_PWM(x)	(((x) & ~0xff) == 0xc004be00)
-#define PWM_INIT	0xc004be00
-#define PWM_SET		0xc004be01
-#define PWM_INFO	0xc004be02
-#define PWM_DEBUG	0xc004be03
+#define TYPE_I2C	0xb7
+#define I2C_INIT	0xb700
+#define I2C_CONFIG	0xb701
+#define I2C_WRITE	0xb702
+#define I2C_GET_MSG	0xb703
+#define I2C_RESET	0xb704
+#define I2C_GET_STAT	0xb705
+#define I2C_GET_HWSTAT	0xb706
+#define I2C_CTRL_HW	0xb707
 
-#define IS_POST(x)	(((x) & ~0xff) == 0xc004cf00)
-#define POST_INIT	0xc004cf00
-#define POST_READ	0xc004cf01
-#define POST_RESET	0xc004cf02
+#define TYPE_PWM	0xbe
+#define PWM_INIT	0xbe00
+#define PWM_SET		0xbe01
+#define PWM_INFO	0xbe02
+#define PWM_DEBUG	0xbe03
 
-#define IS_KCS(x)	(((x) & ~0xff) == 0xc004ba00)
-#define KCS_INIT	0xc004ba00
-#define KCS_READ	0xc004ba01
-#define KCS_WRITE	0xc004ba02
-#define KCS_SWSMI	0xc004ba03
-#define KCS_SETCBID	0xc004ba04
+#define TYPE_POST	0xcf
+#define POST_INIT	0xcf00
+#define POST_READ	0xcf01
+#define POST_RESET	0xcf02
 
-#define IS_SSPI(x)	(((x) & ~0xff) == 0xc014c500)
-#define SSPI_WRITE	0xc014c501
+#define TYPE_KCS	0xba
+#define KCS_INIT	0xba00
+#define KCS_READ	0xba01
+#define KCS_WRITE	0xba02
+#define KCS_SWSMI	0xba03
+#define KCS_SETCBID	0xba04
+
+#define TYPE_SSPI	0xc5
+#define SSPI_WRITE	0xc501
 
 
 FILE *log_stream = NULL;
@@ -149,7 +152,7 @@ static unsigned long get_address(const struct mem_info *mem) {
 
 static void trace_mem(int request, struct mem_info *mem)
 {
-	switch(request) {
+	switch (IOCTL_TYPENR(request)) {
 	case MEM_REQUEST:
 		msg(" MEM.REQ%3d %08x:%04x\n", mem->id, mem->base_addr, mem->region_size);
 		save_base(mem);
@@ -185,7 +188,7 @@ static void trace_irq(unsigned long request, void *arg)
 {
 	struct irq_info *irq = arg;
 
-	switch (request) {
+	switch (IOCTL_TYPENR(request)) {
 	case IRQ_DRV_INIT:
 		msg(" IRQ.INIT driver\n");
 		break;
@@ -212,7 +215,7 @@ static void trace_gpio(unsigned long request, struct gpio_data *gpio)
 {
 	uint8_t *p8 = gpio->buf;
 
-	switch (request) {
+	switch (IOCTL_TYPENR(request)) {
 	case GPIO_READ:
 		msg("GPIO.RD %d %2d -> %d\n", gpio->port_num, gpio->pin_num, *p8);
 		break;
@@ -263,7 +266,7 @@ static void trace_i2c(unsigned long request, void *arg)
 	struct i2c_bus_info *bus = arg;
 	struct i2c_buf_info *buf = arg;
 
-	switch (request) {
+	switch (IOCTL_TYPENR(request)) {
 	default:
 		msg(" I2C.UNK %d\n", request & 0xff);
 		break;
@@ -280,7 +283,7 @@ struct pwm_dev_config {
 
 static void trace_pwm(unsigned long request, struct pwm_dev_config *pwm)
 {
-	switch (request) {
+	switch (IOCTL_TYPENR(request)) {
 	default:
 		msg(" PWM.UNK %d\n", request & 0xff);
 		break;
@@ -300,7 +303,7 @@ struct bios_post_info {
 
 static void trace_post(unsigned long request, struct bios_post_info *post)
 {
-	switch (request) {
+	switch (IOCTL_TYPENR(request)) {
 	default:
 		msg("POST.UNK %d\n", request & 0xff);
 		break;
@@ -326,7 +329,7 @@ struct kcs_info {
 
 static void trace_kcs(unsigned long request, struct kcs_info *kcs)
 {
-	switch (request) {
+	switch (IOCTL_TYPENR(request)) {
 	default:
 		msg(" KCS.UNK %d\n", request & 0xff);
 		break;
@@ -347,7 +350,7 @@ struct sspi_info {
 
 static void trace_sspi(unsigned long request, struct sspi_info *sspi)
 {
-	switch (request) {
+	switch (IOCTL_TYPENR(request)) {
 	default:
 		msg("SSPI.UNK %d\n", request & 0xff);
 		break;
@@ -366,24 +369,34 @@ int ioctl(int fd, unsigned long request, ...)
 
 	int res = syscall(SYS_ioctl, fd, request, arg);
 
-	if (IS_MEM(request))
+	switch (IOCTL_TYPE(request)) {
+	case TYPE_MEM:
 		trace_mem(request, (struct mem_info *)arg);
-	else if (IS_IRQ(request))
+		break;
+	case TYPE_IRQ:
 		trace_irq(request, (void *)arg);
-	else if (IS_GPIO(request))
+		break;
+	case TYPE_GPIO:
 		trace_gpio(request, (struct gpio_data *)arg);
-	else if (IS_I2C(request))
+		break;
+	case TYPE_I2C:
 		trace_i2c(request, (void *)arg);
-	else if (IS_PWM(request))
+		break;
+	case TYPE_PWM:
 		trace_pwm(request, (struct pwm_dev_config *)arg);
-	else if (IS_POST(request))
+		break;
+	case TYPE_POST:
 		trace_post(request, (struct bios_post_info *)arg);
-	else if (IS_KCS(request))
+		break;
+	case TYPE_KCS:
 		trace_kcs(request, (struct kcs_info *)arg);
-	else if (IS_SSPI(request))
+		break;
+	case TYPE_SSPI:
 		trace_sspi(request, (struct sspi_info *)arg);
-	else
+		break;
+	default:
 		msg(" UNK.ioctl(%d, %08lx, %08lx)\n", fd, request, arg);
+	}
 
 	return res;
 }
