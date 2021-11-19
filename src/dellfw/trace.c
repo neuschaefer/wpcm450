@@ -5,8 +5,10 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #define ARRAY_LENGTH(x)	(sizeof(x) / sizeof((x)[0]))
@@ -397,6 +399,46 @@ int ioctl(int fd, unsigned long request, ...)
 	default:
 		msg(" UNK.ioctl(%d, %08lx, %08lx)\n", fd, request, arg);
 	}
+
+	return res;
+}
+
+
+struct event_data {
+	uint16_t driver_id;
+	// uint16_t padding;
+	uint32_t event_id;
+};
+
+static void trace_event(struct event_data *event, size_t count, ssize_t res)
+{
+	if (count != 8 || res != 8) {
+		msg("  EV.GET: Unusual read from eventhandler FD: %zu %zd\n", count, res);
+		return;
+	}
+
+	msg("  EV.GET %u %u\n", event->driver_id, event->event_id);
+}
+
+
+static int eventhandler_fd = -1;
+
+int open(const char *pathname, int flags, mode_t mode)
+{
+	int res = syscall(SYS_open, pathname, flags, mode);
+
+	if (strcmp(pathname, "/dev/aess_eventhandlerdrv") == 0)
+		eventhandler_fd = res;
+
+	return res;
+}
+
+ssize_t read(int fd, void *buf, size_t count)
+{
+	ssize_t res = syscall(SYS_read, fd, buf, count);
+
+	if (eventhandler_fd >= 0 && fd == eventhandler_fd)
+		trace_event(buf, count, res);
 
 	return res;
 }
