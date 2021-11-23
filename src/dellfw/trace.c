@@ -186,9 +186,16 @@ struct irq_info {
 	const char *isr_name;
 };
 
+struct irq_usermode_record {
+	uint16_t num_irq;
+	uint32_t event_id;
+};
+
 static void trace_irq(unsigned long request, void *arg)
 {
 	struct irq_info *irq = arg;
+	struct irq_usermode_record *um = arg;
+	uint16_t *driver_id = arg;
 
 	switch (IOCTL_TYPENR(request)) {
 	case IRQ_DRV_INIT:
@@ -197,6 +204,19 @@ static void trace_irq(unsigned long request, void *arg)
 	case IRQ_DYN_INIT:
 		msg(" IRQ.INIT dynairq %3d %04x %08x %p\n",
 				irq->param1, irq->param2, irq->param3, irq->isr_name);
+		break;
+	case IRQ_DYN_CONFIG:
+		msg(" IRQ.CFG  dynairq %3d %04x %08x %p\n",
+				irq->param1, irq->param2, irq->param3, irq->isr_name);
+		break;
+	case IRQ_DYN_CLEAR:
+		msg(" IRQ.CLR  dynairq %3d\n", irq->param1);
+		break;
+	case IRQ_GEN_INIT:
+		msg(" IRQ.INIT geneisr driver %d\n", *driver_id);
+		break;
+	case IRQ_UM_ISRID:
+		msg(" IRQ.UM   irq %d %d\n", um->num_irq, um->event_id);
 		break;
 	default:
 		msg(" IRQ.UNK %d\n", request & 0xff);
@@ -269,6 +289,18 @@ static void trace_i2c(unsigned long request, void *arg)
 	struct i2c_buf_info *buf = arg;
 
 	switch (IOCTL_TYPENR(request)) {
+	case I2C_INIT:
+		msg(" I2C.INIT %d ...\n",
+				bus->channel);
+		break;
+	case I2C_WRITE:
+		msg(" I2C.WR   %d ...\n",
+				buf->channel);
+		break;
+	case I2C_GET_HWSTAT:
+		msg(" I2C.HW   %d ...\n",
+				bus->channel);
+		break;
 	default:
 		msg(" I2C.UNK %d\n", request & 0xff);
 		break;
@@ -286,6 +318,22 @@ struct pwm_dev_config {
 static void trace_pwm(unsigned long request, struct pwm_dev_config *pwm)
 {
 	switch (IOCTL_TYPENR(request)) {
+	case PWM_INIT:
+		msg(" PWM.INIT %d <- duty %d, freq %d, div %d\n",
+				pwm->channel, pwm->duty_cycle, pwm->base_freq, pwm->freq_div);
+		break;
+	case PWM_SET:
+		msg(" PWM.SET  %d <- duty %d, freq %d, div %d\n",
+				pwm->channel, pwm->duty_cycle, pwm->base_freq, pwm->freq_div);
+		break;
+	case PWM_INFO:
+		msg(" PWM.INFO %d -> duty %d, freq %d, div %d\n",
+				pwm->channel, pwm->duty_cycle, pwm->base_freq, pwm->freq_div);
+		break;
+	case PWM_DEBUG:
+		msg(" PWM.DBG  %d <- duty %d, freq %d, div %d\n",
+				pwm->channel, pwm->duty_cycle, pwm->base_freq, pwm->freq_div);
+		break;
 	default:
 		msg(" PWM.UNK %d\n", request & 0xff);
 		break;
@@ -303,9 +351,25 @@ struct bios_post_info {
 	uint8_t *buf;
 };
 
+static void dump_u8_buf(const uint8_t *buf, size_t size)
+{
+	int i;
+
+	for (i = 0; i < size; i++)
+		cont(" %02x", buf[i]);
+}
+
 static void trace_post(unsigned long request, struct bios_post_info *post)
 {
 	switch (IOCTL_TYPENR(request)) {
+	case POST_INIT:
+		msg("POST.INIT %d %02x%02x\n", post->addr_enable, post->addr_msb, post->addr_lsb);
+		break;
+	case POST_READ:
+		msg("POST.RD   [%d]\n", post->copy_len);
+		dump_u8_buf(post->buf, post->copy_len);
+		cont("\n");
+		break;
 	default:
 		msg("POST.UNK %d\n", request & 0xff);
 		break;
@@ -353,6 +417,15 @@ struct sspi_info {
 static void trace_sspi(unsigned long request, struct sspi_info *sspi)
 {
 	switch (IOCTL_TYPENR(request)) {
+	case SSPI_WRITE:
+		msg("SSPI.WRITE %d, time %3d, mode %02x, speed %3d, [%d,%d] ",
+				sspi->chip_select, sspi->proc_time, sspi->mode, sspi->speed,
+				sspi->send_size, sspi->recv_size);
+		dump_u8_buf(sspi->send_buf, sspi->send_size);
+		cont(" -> ");
+		dump_u8_buf(sspi->recv_buf, sspi->recv_size);
+		cont("\n");
+		break;
 	default:
 		msg("SSPI.UNK %d\n", request & 0xff);
 		break;
@@ -412,12 +485,13 @@ struct event_data {
 
 static void trace_event(struct event_data *event, size_t count, ssize_t res)
 {
-	if (count != 8 || res != 8) {
+	// aess_eventhandler_read returns zero on success, contrary to how read(2) should work.
+	if (count != 8 || res != 0) {
 		msg("  EV.GET: Unusual read from eventhandler FD: %zu %zd\n", count, res);
 		return;
 	}
 
-	msg("  EV.GET %u %u\n", event->driver_id, event->event_id);
+	msg("  EV.GET driver %u, event %u\n", event->driver_id, event->event_id);
 }
 
 
