@@ -524,6 +524,8 @@ static void init_trace(void)
 
 	snprintf(filename, sizeof(filename), "/tmp/trace-%d.log", getpid());
 	log_stream = fopen(filename, "w");
-
-	msg("Hello from trace.so\n");
+	if (log_stream) {
+		setlinebuf(log_stream);
+		msg("Hello from trace.so\n");
+	}
 }
