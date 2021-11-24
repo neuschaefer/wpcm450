@@ -366,9 +366,13 @@ static void trace_post(unsigned long request, struct bios_post_info *post)
 		msg("POST.INIT %d %02x%02x\n", post->addr_enable, post->addr_msb, post->addr_lsb);
 		break;
 	case POST_READ:
-		msg("POST.RD   [%d]\n", post->copy_len);
+		msg("POST.RD   %d %02x%02x [%d]",
+				post->addr_enable, post->addr_msb, post->addr_lsb, post->copy_len);
 		dump_u8_buf(post->buf, post->copy_len);
 		cont("\n");
+		break;
+	case POST_RESET:
+		msg("POST.RST  %d\n", post->addr_enable);
 		break;
 	default:
 		msg("POST.UNK %d\n", request & 0xff);
@@ -396,6 +400,16 @@ struct kcs_info {
 static void trace_kcs(unsigned long request, struct kcs_info *kcs)
 {
 	switch (IOCTL_TYPENR(request)) {
+	case KCS_READ:
+		msg(" KCS.RD %d [%d]", kcs->channel, *kcs->read_len);
+		dump_u8_buf(kcs->data, *kcs->read_len);
+		cont("\n");
+		break;
+	case KCS_WRITE:
+		msg(" KCS.WR %d [%d]", kcs->channel, kcs->write_len);
+		dump_u8_buf(kcs->data, kcs->write_len);
+		cont("\n");
+		break;
 	default:
 		msg(" KCS.UNK %d\n", request & 0xff);
 		break;
@@ -418,7 +432,7 @@ static void trace_sspi(unsigned long request, struct sspi_info *sspi)
 {
 	switch (IOCTL_TYPENR(request)) {
 	case SSPI_WRITE:
-		msg("SSPI.WRITE %d, time %3d, mode %02x, speed %3d, [%d,%d] ",
+		msg("SSPI.WR %d, time %3d, mode %02x, speed %3d, [%d,%d] ",
 				sspi->chip_select, sspi->proc_time, sspi->mode, sspi->speed,
 				sspi->send_size, sspi->recv_size);
 		dump_u8_buf(sspi->send_buf, sspi->send_size);
