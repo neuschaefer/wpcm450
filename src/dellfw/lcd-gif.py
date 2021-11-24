@@ -36,6 +36,7 @@ def save_frame():
 
 def crunch(fn):
     f = open(fn, 'r')
+    last_row = 0
 
     for line in f.readlines():
         m = re_sspi.match(line)
@@ -54,11 +55,13 @@ def crunch(fn):
         if cs == 0 and send_len == 4:
             assert send_data[0] == 0x46
             assert send_data[1] in range(0xb0, 0xbf)
-            last_row = send_data[1] - 0xb0
+            row = send_data[1] - 0xb0
+            if row < last_row:
+                save_frame()
+            last_row = row
 
         if cs == 1:
             matrix[last_row] = send_data
-            save_frame()
 
 def write_gif(fn):
     rows = list(interesting_rows)
