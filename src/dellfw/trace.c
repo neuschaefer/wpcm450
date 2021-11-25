@@ -66,6 +66,18 @@
 #define TYPE_SSPI	0xc5
 #define SSPI_WRITE	0xc501
 
+#define TYPE_ADC	0xbb
+#define ADC_READ	0xbb00
+
+#define TYPE_FAN	0xbd
+#define FAN_CONFIG	0xbd00
+#define FAN_READ	0xbd01
+
+#define TYPE_PECI	0xc8
+#define PECI_READ	0xc800
+#define PECI_QUERY	0xc801
+#define PECI_COMMAND	0xc802
+
 
 FILE *log_stream = NULL;
 
@@ -447,6 +459,88 @@ static void trace_sspi(unsigned long request, struct sspi_info *sspi)
 }
 
 
+struct adc_data {
+	uint8_t channel;
+	uint32_t reading;
+};
+
+static void trace_adc(unsigned long request, struct adc_data *adc)
+{
+	switch (IOCTL_TYPENR(request)) {
+	case ADC_READ:
+		msg(" ADC.RD %3d ->%9d\n", adc->channel, adc->reading);
+		break;
+	default:
+		msg(" ADC.UNK %d\n", request & 0xff);
+		break;
+	}
+}
+
+
+struct fan_data {
+	uint8_t channel;
+	uint8_t pulses_per_rev;
+	uint16_t speed_rpm;
+};
+
+static void trace_fan(unsigned long request, struct fan_data *fan)
+{
+	switch (IOCTL_TYPENR(request)) {
+	case FAN_CONFIG:
+		msg(" FAN.CFG %2d <- %d ppr\n", fan->channel, fan->pulses_per_rev);
+		break;
+	case FAN_READ:
+		msg(" FAN.RD  %2d -> %d rpm\n", fan->channel, fan->speed_rpm);
+		break;
+	default:
+		msg(" FAN.UNK %d\n", request & 0xff);
+		break;
+	}
+}
+
+
+struct peci_sensor_data {
+	uint8_t proc_domain;
+	uint8_t reading;
+	uint8_t reserved1;
+	uint8_t reserved2;
+};
+
+struct peci_command_data {
+	uint8_t client_addr;
+	uint8_t write_len;
+	uint8_t read_len;
+	uint8_t command_code;
+	uint8_t command_data[16];
+};
+
+static void trace_peci(unsigned long request, void *arg, struct peci_command_data *old_cmd)
+{
+	struct peci_sensor_data *sensor = arg;
+	struct peci_command_data *cmd = arg;
+
+	switch (IOCTL_TYPENR(request)) {
+	case PECI_READ:
+		msg("PECI.RD  %02x -> %08x\n", sensor->proc_domain, sensor->reading);
+		break;
+	case PECI_QUERY:
+		msg("PECI.QRY %02x\n", sensor->proc_domain);
+		break;
+	case PECI_COMMAND:
+		msg("PECI.CMD %02x:%02x [%d,%d]", cmd->client_addr, cmd->command_code,
+				cmd->write_len, cmd->read_len);
+		dump_u8_buf(old_cmd->command_data, cmd->write_len);
+		cont(" -> ");
+		dump_u8_buf(cmd->command_data, cmd->read_len);
+		cont("\n");
+		break;
+	default:
+		msg("PECI.UNK %d\n", request & 0xff);
+		break;
+	}
+}
+
+
 int ioctl(int fd, unsigned long request, ...)
 {
 	unsigned long arg;
@@ -455,6 +549,14 @@ int ioctl(int fd, unsigned long request, ...)
 	va_start(ap, request);
 	arg = va_arg(ap, unsigned long);
 	va_end(ap);
+
+	// Things that have to be done before the ioctl is allowed to execute.
+	struct peci_command_data peci_cmd;
+	switch (IOCTL_TYPENR(request)) {
+	case PECI_COMMAND:
+		memcpy(&peci_cmd, (struct peci_command_data *)arg, sizeof(peci_cmd));
+		break;
+	}
 
 	int res = syscall(SYS_ioctl, fd, request, arg);
 
@@ -482,6 +584,15 @@ int ioctl(int fd, unsigned long request, ...)
 		break;
 	case TYPE_SSPI:
 		trace_sspi(request, (struct sspi_info *)arg);
+		break;
+	case TYPE_ADC:
+		trace_adc(request, (struct adc_data *)arg);
+		break;
+	case TYPE_FAN:
+		trace_fan(request, (struct fan_data *)arg);
+		break;
+	case TYPE_PECI:
+		trace_peci(request, (void *)arg, &peci_cmd);
 		break;
 	default:
 		msg(" UNK.ioctl(%d, %08lx, %08lx)\n", fd, request, arg);
