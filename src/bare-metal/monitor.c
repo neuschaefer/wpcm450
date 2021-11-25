@@ -45,6 +45,23 @@ static char uart_rx(void)
 	return read32(UART_BASE + 0);
 }
 
+#define MFSEL1 0xb000000c
+static void uart_init(void)
+{
+	/* Set MFSEL1.BSPSEL to enable UART0 pinmux */
+	uint32_t mfsel1 = read32(MFSEL1);
+	write32(MFSEL1, mfsel1 | (1 << 9));
+
+	/*
+	 * Set divisor to 13 (24MHz / 16 / 13 = 115384Hz. Close enough.)
+	 * The -2 is a Nuvoton-specific quirk.
+	 */
+	write32(UART_BASE + 0x0c, 0x80);   // enable divisor latch
+	write32(UART_BASE + 0x00, 13 - 2); // low byte
+	write32(UART_BASE + 0x04, 0);      // high byte
+	write32(UART_BASE + 0x0c, 0x03);   // disable divisor latch; set 8n1
+}
+
 
 /* Timer driver */
 
@@ -734,6 +751,8 @@ static void main_loop(void)
 
 void main(void)
 {
+	uart_init();
+
 	puts("Press any key to avoid running the default boot script");
 	if (!wait_for_key(1000000)) {
 		source(_bootscript);
