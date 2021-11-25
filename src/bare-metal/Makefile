@@ -11,7 +11,7 @@ LOLCONV := ../../tools/lolconv
 CFLAGS  := -Os -fno-builtin -nostdlib -Wall -Wno-unused-function -Wno-main
 LDFLAGS := -T monitor.ld
 
-all: scream.img monitor.img tlbtest.lol getuartdiv.lol
+all: scream.img monitor.img tlbtest.lol getuartdiv.lol monitor-flash-32m.bin
 
 
 %.o: %.s
@@ -45,6 +45,10 @@ scream.img: scream.bin
 
 monitor.img: monitor.bin
 	$(MKIMAGE) -acx -b 0x40b00000 -l 0x6400000 -e 0x6400000 -n monitor -u 6 -i $< -o $@
+
+monitor-flash-32m.bin: monitor.bin
+	(printf 'P\004U\252'; cat $+) > $@
+	truncate -s 32M $@
 
 clean:
 	rm -f *.o scream.elf scream.bin scream.img \
