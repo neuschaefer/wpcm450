@@ -1,0 +1,73 @@
+<html>
+
+<head>
+<link rel="stylesheet" href="style.css" type="text/css">
+<script src="main.js"></script>
+<title>lolbmc</title>
+<head>
+
+<body>
+<h1>lolbmc (PREVIEW)</h1>
+
+<p>
+This a <em>baseboard management controller</em> (BMC) with custom firmware
+based on familiar Unix tools.
+</p>
+
+<p>
+Unlike typical BMC firmware, it doesn't implement
+<a href="https://en.wikipedia.org/wiki/Intelligent_Platform_Management_Interface">IPMI</a>
+or a fancy web interface, or rely on Java/Flash applets. Instead, the protocol of
+choice is plain old SSH.
+</p>
+
+
+<h2>First login</h2>
+TODO
+
+<h2>Changing your password</h2>
+
+<pre>
+ssh root@<span class="thishost">host</span>
+bmc# passwd
+Changing password for root.
+...
+ssh root@<span class="thishost">host</span> persist /etc/shadow
+</pre>
+
+<h2>Adding SSH keys</h2>
+<pre>
+ssh-copy-id root@<span class="thishost">host</span>
+ssh root@<span class="thishost">host</span> persist /root/.ssh/authorized_keys
+ssh-copy-id sol@<span class="thishost">host</span>
+ssh-copy-id bmc@<span class="thishost">host</span>
+ssh root@<span class="thishost">host</span> persist /home/*/.ssh/authorized_keys
+</pre>
+
+
+<h2>Power management</h2>
+<pre>
+ssh bmc@<span class="thishost">host</span> power on
+</pre>
+
+<h2>Serial over LAN</h2>
+<p>
+SOL can be entered by typing <code>sol</code> on the shell,
+or through <code>ssh sol@<span class="thishost">host</span> </code>
+</p>
+
+
+<h2>Graphical console</h2>
+<p>
+There is a VNC server listening on localhost:5900, which can be accessed through an SSH tunnel.
+</p>
+
+
+<p class="footer"><hr/>
+<span class="footer-text">The source code for this firmware is available on
+<a href='https://github.com/neuschaefer/wpcm450'>GitHub (neuschaefer/wpcm450)</a>.</span>
+</p>
+<script> fixThisHost() </script>
+</body>
+
+</html>
