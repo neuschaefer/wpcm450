@@ -36,6 +36,9 @@ bootscript.elf: bootscript.txt
 	$(OBJCOPY) -I binary -O elf32-littlearm -B armv5t --rename-section .data=.bootscript bootscript.tmp $@
 	rm bootscript.tmp
 
+bootscript.txt: bootscript.txt.default
+	cp $+ $@
+
 MONITOR_OBJS = start.o monitor.o bootscript.elf
 monitor.elf: $(MONITOR_OBJS) monitor.ld
 	$(LD) $(LDFLAGS) $(MONITOR_OBJS) -o $@
