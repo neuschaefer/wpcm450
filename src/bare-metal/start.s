@@ -51,7 +51,7 @@ reset:
 	# Set the stack pointer to the end of internal RAM @ 0x0
 	mov	sp, #0x2000
 
-	# lolmon to internal RAM @ 0x0
+	# Copy lolmon to internal RAM @ 0x0
 	adr	r0, _start
 	mov	r1, #0
 	mov	r2, #0x2000
