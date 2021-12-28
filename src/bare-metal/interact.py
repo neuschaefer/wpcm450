@@ -37,7 +37,9 @@ class Lolmon:
                 return bytes(answer), False
 
     def flush(self):
-        self.s.read_all()
+        while self.s.read_all() != b'':
+            time.sleep(0.05)
+        self.run_command('')
 
     def enter_with_echo(self, cmd):
         if isinstance(cmd, str):
@@ -55,18 +57,23 @@ class Lolmon:
             pos += len(chunk)
 
     def run_command(self, cmd):
-        if self.debug:
-            print(':> %s' % cmd)
-        self.enter_with_echo(cmd)
+        try:
+            if self.debug:
+                print(':> %s' % cmd)
+            self.enter_with_echo(cmd)
 
-        self.s.write(b'\n')
-        assert self.s.read(2) == b'\r\n'
+            self.s.write(b'\n')
+            assert self.s.read(2) == b'\r\n'
 
-        answer, good = self.read_until_prompt()
-        if not good:
-            print('Command \'%s\' timed out:\n%s' % (cmd, answer.decode('UTF-8')))
-            return b''
-        return answer
+            answer, good = self.read_until_prompt()
+            if not good:
+                print('Command \'%s\' timed out:\n%s' % (cmd, answer.decode('UTF-8')))
+                return b''
+            return answer
+        except KeyboardInterrupt as e:
+            time.sleep(0.10)
+            self.flush()
+            raise e
 
     def writeX(self, cmd, size, addr, value):
         #print('poke %s %08x %s' % (cmd, addr, value))
