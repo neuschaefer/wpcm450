@@ -4,6 +4,9 @@
 
 import serial, time, re, struct, sys
 
+def BIT(x):
+    return 1 << x
+
 class Lolmon:
     def __init__(self, device):
         self.device = device
@@ -179,7 +182,223 @@ class RNG(Block):
     DATA = 4
     MODE = 8
 
-GCR = MC = EMC = USB = KCS = FIU = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
+# MAC address
+class MAC:
+    def __init__(self, a, b, c, d, e, f):
+        self.addr = (a, b, c, d, e, f)
+
+    def __repr__(self):
+        return '%02x:%02x:%02x:%02x:%02x:%02x' % self.addr
+
+    def __getitem__(self, i):
+        return self.addr[i]
+
+class EMC(Block):
+    CAMCMR = 0x00
+    CAMCMR_AUP = BIT(0)
+    CAMCMR_AMP = BIT(1)
+    CAMCMR_ABP = BIT(2)
+    CAMCMR_CCAM = BIT(3)
+    CAMCMR_ECMP = BIT(4)
+    CAMEN = 0x04
+    CAMxM = [0x08 + 0x10 * i for i in range(16)]
+    CAMxL = [0x0c + 0x10 * i for i in range(16)]
+    TXDLSA = 0x88
+    RXDLSA = 0x8c
+    MCMDR = 0x90
+    MCMDR_RXON = BIT(0)
+    MCMDR_ALP = BIT(1)
+    MCMDR_ARP = BIT(2)
+    MCMDR_ACP = BIT(3)
+    MCMDR_AEP = BIT(4)
+    MCMDR_SPCRC = BIT(5)
+    MCMDR_TXON = BIT(8)
+    MCMDR_NDEF = BIT(9)
+    MCMDR_SDPZ = BIT(16)
+    MCMDR_EnSQE = BIT(17)
+    MCMDR_FDUP = BIT(18)
+    MCMDR_EnMDC = BIT(19)
+    MCMDR_OPMOD = BIT(20)
+    MCMDR_LBK = BIT(21)
+    MCMDR_SWR = BIT(24)
+    MIID = 0x94
+    MIIDA = 0x98
+    FFTCR = 0x9c
+    TSDR = 0xa0
+    RSDR = 0xa4
+    DMARFC = 0xa8
+    MIEN = 0xac
+    MISTA = 0xb0
+    MGSTA = 0xb4
+    MPCNT = 0xb8
+    MRPC = 0xbc
+    MRPCC = 0xc0
+    MREPC = 0xc4
+    DMARFS = 0xc8
+    CTXDSA = 0xcc
+    CTXBSA = 0xd0
+    CRXDSA = 0xd4
+    CRXBSA = 0xd8
+
+    CAMCMR_DEFAULT = CAMCMR_AUP | CAMCMR_ABP | CAMCMR_ECMP
+    MCMDR_DEFAULT = MCMDR_OPMOD | MCMDR_EnMDC | MCMDR_FDUP | MCMDR_SPCRC
+    MCMDR_ACTIVE = MCMDR_DEFAULT | MCMDR_TXON | MCMDR_RXON
+
+    BUF_SIZE = 0x800     # enough for 1 packet and descriptor
+    FRAME_SIZE = 0x600   # max. bytes per frame
+    BUFS_SIZE = 0x8000   # memory for all buffers per EMC and direction
+
+    class Buf:
+        DATA_OFFSET = 0x200
+
+        def __init__(self, base, lolmon):
+            self.base = base
+            self.l = lolmon
+            self.data_base = self.base + self.DATA_OFFSET
+            self.next = self.base # until another address is provided
+
+        def __repr__(self):
+            return "%s(0x%x)" % (self.__class__.__name__, self.base)
+
+        def dump(self):
+            self.l.dump32(self.base, 4)
+
+    class RXBuf(Buf):
+        SL = 0
+        BUF_ADDR = 4
+        RESERVED = 8
+        NEXTDESC = 12
+
+        class Status:
+            OWNER_MASK = 0xc0000000
+            OWNER_EMC = 0x80000000
+            OWNER_ARM = 0x00000000
+            MISC_MASK = 0x3fff0000
+            LEN_MASK = 0x0000ffff
+
+            def __init__(self, raw):
+                self.raw = raw
+                self.owner = self.raw & self.OWNER_MASK
+                self.misc = self.raw & self.MISC_MASK
+                self.len = self.raw & self.LEN_MASK
+
+            def is_ready(self):
+                return self.owner == self.OWNER_ARM
+
+            def __repr__(self):
+                owner = 'ARM' if self.owner == self.OWNER_ARM else 'EMC'
+                return 'RXBuf.Status(%s, 0x%04x, %d)' % (owner, self.misc, self.len)
+
+        def write_initial(self):
+            self.l.write32(self.base + self.SL, self.Status.OWNER_EMC)
+            self.l.write32(self.base + self.BUF_ADDR, self.data_base)
+            self.l.write32(self.base + self.RESERVED, 0)
+            self.l.write32(self.base + self.NEXTDESC, self.next)
+
+        def rearm(self):
+            self.l.write32(self.base + self.SL, self.Status.OWNER_EMC)
+
+        def get_status(self):
+            return self.Status(self.l.read32(self.base + self.SL))
+
+    class TXBuf(Buf):
+        CONTROL = 0
+        OWNER_EMC = 0x80000000
+        OWNER_ARM = 0x00000000
+        INT_ENABLE = 0x00000004
+        CRC_APPEND = 0x00000002
+        PADDING = 0x00000001
+        BUF_ADDR = 4
+        STATUS_LEN = 8
+        NEXTDESC = 12
+
+        def write_initial(self):
+            self.l.write32(self.base + self.CONTROL, 0)
+            self.l.write32(self.base + self.BUF_ADDR, self.data_base)
+            self.l.write32(self.base + self.STATUS_LEN, 0)
+            self.l.write32(self.base + self.NEXTDESC, self.next)
+
+        def get_state(self):
+            return self.l.read32(self.base + self.STATUS_LEN)
+
+    def set_cam(self, index, mac):
+        self.write32(self.CAMxM[index], mac[5] << 24 | mac[4] << 16 | mac[3] << 8 | mac[2])
+        self.write32(self.CAMxL[index], mac[1] << 24 | mac[0] << 16)
+        self.setclr32(self.CAMEN, index, 1)
+
+    def init(self, buf_base=None):
+        if not buf_base:
+            if self.base == 0xb0002000:
+                buf_base = 0x100000
+                self.reset = self.clock = 6
+                self.mac = MAC(0xaa,0xbb,0xcc,0xdd,0xee,0x01)
+            elif self.base == 0xb0003000:
+                buf_base = 0x100000 + 2*self.BUFS_SIZE
+                self.reset = self.clock = 7
+                self.mac = MAC(0xaa,0xbb,0xcc,0xdd,0xee,0x02)
+
+        # next buffer to use
+        self.rx_head = 0
+        self.tx_head = 0
+
+        # reset core
+        clk.clken(self.clock, 1)
+        clk.reset(self.clock, 1)
+
+        # allocate buffers
+        self.rx_buf_base = buf_base
+        self.tx_buf_base = buf_base + self.BUFS_SIZE
+        self.rx_bufs = [self.RXBuf(addr, self.l) for addr in
+                range(self.rx_buf_base, self.rx_buf_base + self.BUFS_SIZE, self.BUF_SIZE)]
+        self.tx_bufs = [self.TXBuf(addr, self.l) for addr in
+                range(self.tx_buf_base, self.tx_buf_base + self.BUFS_SIZE, self.BUF_SIZE)]
+
+        # link them up
+        for i, desc in enumerate(self.rx_bufs):
+            desc.next = self.rx_bufs[(i + 1) % len(self.rx_bufs)].base
+        for i, desc in enumerate(self.tx_bufs):
+            desc.next = self.tx_bufs[(i + 1) % len(self.tx_bufs)].base
+
+        # commit buffers to memory
+        for desc in self.rx_bufs: desc.write_initial()
+        for desc in self.tx_bufs: desc.write_initial()
+
+        # initialize core
+        clk.reset(self.clock, 0)
+        self.set_cam(0, self.mac)
+        # Accept unicast, and broadcast, use CAM
+        self.write32(self.CAMCMR, self.CAMCMR_DEFAULT)
+        self.write32(self.TXDLSA, self.tx_bufs[0].base)
+        self.write32(self.RXDLSA, self.rx_bufs[0].base)
+        self.write32(self.DMARFC, self.FRAME_SIZE)
+        self.write32(self.MCMDR, self.MCMDR_ACTIVE)
+
+    def dump_rx_descs(self):
+        for desc in self.rx_bufs: desc.dump()
+
+    def dump_tx_descs(self):
+        for desc in self.tx_bufs: desc.dump()
+
+    def advance_rx(self):
+        self.rx_head = (self.rx_head + 1) % len(self.rx_bufs)
+
+    def advance_tx(self):
+        self.tx_head = (self.tx_head + 1) % len(self.tx_bufs)
+
+    def rx_frame(self):
+        self.write32(self.RSDR, 1)
+        buf = self.rx_bufs[self.rx_head]
+        while True:
+            status = buf.get_status()
+            if status.is_ready():
+                break
+        print(status)
+        self.l.dump8(buf.data_base, status.len)
+        buf.rearm()
+        self.advance_rx()
+
+
+GCR = MC = USB = KCS = FIU = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
 PECI = GFXI = SSPI = Timers = AIC = GPIO = ADC = SDHC = ROM = Block
 
 
@@ -218,3 +437,5 @@ aes  = AES(l, 0xb800b000)
 fiu  = FIU(l, 0xc8000000)
 shm  = SHM(l, 0xc8001000)
 rom  = ROM(l, 0xffff0000)
+
+emc0.init()
