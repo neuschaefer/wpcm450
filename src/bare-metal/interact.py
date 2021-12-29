@@ -304,29 +304,54 @@ class EMC(Block):
 
         def rearm(self):
             self.l.write32(self.base + self.SL, self.Status.OWNER_EMC)
+            self.status = None
 
-        def get_status(self):
-            return self.Status(self.l.read32(self.base + self.SL))
+        def fetch_status(self):
+            self.status = self.Status(self.l.read32(self.base + self.SL))
 
     class TXBuf(Buf):
         CONTROL = 0
-        OWNER_EMC = 0x80000000
-        OWNER_ARM = 0x00000000
-        INT_ENABLE = 0x00000004
-        CRC_APPEND = 0x00000002
-        PADDING = 0x00000001
+        CONTROL_OWNER_EMC = BIT(31)
+        CONTROL_INTEN = BIT(2)
+        CONTROL_CRCAPP = BIT(1)
+        CONTROL_PADEN = BIT(0)
         BUF_ADDR = 4
-        STATUS_LEN = 8
+        SL = 8
+        SL_TXCP = BIT(19)
         NEXTDESC = 12
+
+        CONTROL_GO = CONTROL_OWNER_EMC | CONTROL_CRCAPP | CONTROL_PADEN
+
+        class Status:
+            CONTROL_OWNER_EMC = BIT(31)
+
+            def __init__(self, c, sl):
+                self.c = c
+                self.sl = sl
+
+            def is_ready(self):
+                return not(self.c & self.CONTROL_OWNER_EMC)
+
+            def is_good(self):
+                return bool(self.sl & SL_TXCP)
 
         def write_initial(self):
             self.l.write32(self.base + self.CONTROL, 0)
             self.l.write32(self.base + self.BUF_ADDR, self.data_base)
-            self.l.write32(self.base + self.STATUS_LEN, 0)
+            self.l.write32(self.base + self.SL, 0)
             self.l.write32(self.base + self.NEXTDESC, self.next)
 
-        def get_state(self):
-            return self.l.read32(self.base + self.STATUS_LEN)
+        def fetch_status(self):
+            self.status = self.Status(self.l.read32(self.base + self.CONTROL),
+                                      self.l.read32(self.base + self.SL))
+
+        def submit(self):
+            self.l.write32(self.base + self.SL, self.len)
+            self.l.write32(self.base + self.CONTROL, self.CONTROL_GO)
+
+        def set_data(self, data):
+            self.len = len(data)
+            self.l.write8(self.data_base, list(data))
 
     def set_cam(self, index, mac):
         self.write32(self.CAMxM[index], mac[5] << 24 | mac[4] << 16 | mac[3] << 8 | mac[2])
@@ -392,17 +417,42 @@ class EMC(Block):
     def advance_tx(self):
         self.tx_head = (self.tx_head + 1) % len(self.tx_bufs)
 
-    def rx_frame(self):
+    # get the next RX buffer that is ready. After use, buf.rearm() must be called.
+    def get_rx_buf(self):
         self.write32(self.RSDR, 1)
         buf = self.rx_bufs[self.rx_head]
         while True:
-            status = buf.get_status()
-            if status.is_ready():
+            buf.fetch_status()
+            if buf.status.is_ready():
                 break
-        print(status)
-        self.l.dump8(buf.data_base, status.len)
-        buf.rearm()
         self.advance_rx()
+        return buf
+
+    # receive a frame, as data
+    def rx_frame(self):
+        buf = self.get_rx_buf()
+        data = buf.fetch_data()
+        self.l.dump8(buf.data_base, buf.status.len)
+        buf.rearm()
+        return data
+
+    def get_tx_buf(self):
+        buf = self.tx_bufs[self.tx_head]
+        while True:
+            buf.fetch_status()
+            if buf.status.is_ready():
+                break
+        self.advance_tx()
+        return buf
+
+    def submit_tx_buf(self, buf):
+        buf.submit()
+        self.write32(self.TSDR, 1)
+
+    def tx_frame(self, data):
+        buf = self.get_tx_buf()
+        buf.set_data(data)
+        self.submit_tx_buf(buf)
 
 
 GCR = MC = USB = KCS = FIU = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
