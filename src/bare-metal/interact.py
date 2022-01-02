@@ -2,10 +2,22 @@
 # SPDX-License-Identifier: MIT
 # Usage: python3 -i ./interact.py
 
-import serial, time, re, struct, sys
+import serial, time, re, struct, sys, random, socket, os
 
 def BIT(x):
     return 1 << x
+
+def MASK(x):
+    return BIT(x) - 1
+
+def bswap16(x):
+    x = (x & 0xff00ff00) >>  8 | (x & 0x00ff00ff) <<  8
+    return x
+
+def bswap32(x):
+    x = (x & 0xffff0000) >> 16 | (x & 0x0000ffff) << 16
+    x = (x & 0xff00ff00) >>  8 | (x & 0x00ff00ff) <<  8
+    return x
 
 class Lolmon:
     def __init__(self, device):
@@ -75,6 +87,13 @@ class Lolmon:
             self.flush()
             raise e
 
+    def run_command_noreturn(self, cmd):
+        if self.debug:
+            print(':> %s' % cmd)
+        self.enter_with_echo(cmd)
+        self.s.write(b'\n')
+        assert self.s.read(2) == b'\r\n'
+
     def writeX(self, cmd, size, addr, value):
         #print('poke %s %08x %s' % (cmd, addr, value))
         if isinstance(value, bytes):
@@ -119,11 +138,18 @@ class Lolmon:
         output = self.run_command("%s %08x %d" % (cmd, addr, num))
         a = self.parse_r_output(output)
         if num == 1: return a[0]
-        else:        return a
+        else:        return bytes(a)
 
     def read8(self, addr, num=1):  return self.readX('rb', 1, addr, num)
     def read16(self, addr, num=1): return self.readX('rh', 2, addr, num)
     def read32(self, addr, num=1): return self.readX('rw', 4, addr, num)
+
+    def copyX(self, cmd, dest, src, num):
+        self.run_command("%s %08x %08x %d" % (cmd, src, dest, num))
+
+    def copy8(self, dest, src, num):  self.copyX('cb', dest, src, num)
+    def copy16(self, dest, src, num): self.copyX('ch', dest, src, num)
+    def copy32(self, dest, src, num): self.copyX('cw', dest, src, num)
 
     def make_setclr(rd, wr):
         def fn(self, addr, bit, value):
@@ -146,6 +172,12 @@ class Lolmon:
     dump16 = make_dump('rh')
     dump32 = make_dump('rw')
 
+    def call(self, addr, a=0, b=0, c=0, d=0):
+        self.run_command_noreturn('call %x %d %d %d %d' % (addr, a, b, c, d))
+
+    def call_linux_and_run_microcom(self, addr):
+        self.call(addr, 0, 0xffffffff, 0)
+        os.system(f'busybox microcom -s 115200 /dev/ttyUSB0')
 
 class Block:
     def __init__(self, lolmon, base=None):
@@ -200,6 +232,29 @@ class MAC:
     def __getitem__(self, i):
         return self.addr[i]
 
+    def to_bytes(self):
+        return bytes(self.addr)
+
+MAC.broadcast = MAC(0xff,0xff,0xff,0xff,0xff,0xff)
+
+class IP:
+    def __init__(self, a, b, c, d):
+        self.addr = (a, b, c, d)
+
+    def __repr__(self):
+        return '%d.%d.%d.%d' % self.addr
+
+    def __getitem__(self, i):
+        return self.addr[i]
+
+    def to_int(self):
+        # 10.1.2.3 -> 0x0a010203
+        return self.addr[0] << 24 | self.addr[1] << 16 | self.addr[2] <<  8 | self.addr[3]
+
+    def to_bytes(self):
+        # IP address in wire format (big endian)
+        return bytes(self.addr)
+
 class EMC(Block):
     CAMCMR = 0x00
     CAMCMR_AUP = BIT(0)
@@ -251,9 +306,15 @@ class EMC(Block):
     MCMDR_DEFAULT = MCMDR_OPMOD | MCMDR_EnMDC | MCMDR_FDUP | MCMDR_SPCRC
     MCMDR_ACTIVE = MCMDR_DEFAULT | MCMDR_TXON | MCMDR_RXON
 
+    ARP_BASE = 0xf0000   # start address of ARP frame
+    BUFS_BASE = 0x100000 # start address of buffers
     BUF_SIZE = 0x800     # enough for 1 packet and descriptor
     FRAME_SIZE = 0x600   # max. bytes per frame
     BUFS_SIZE = 0x8000   # memory for all buffers per EMC and direction
+    MTU = 1420           # max. number of bytes that we'd actually put in a frame
+
+    ETHERTYPE_ARP = 0x806
+    ETHERTYPE_IP  = 0x800
 
     class Buf:
         DATA_OFFSET = 0x200
@@ -309,6 +370,15 @@ class EMC(Block):
         def fetch_status(self):
             self.status = self.Status(self.l.read32(self.base + self.SL))
 
+        def fetch_ethertype(self):
+            return bswap16(self.l.read16(self.data_base + 12))
+
+        def fetch_data(self):
+            return self.l.read8(self.data_base, self.status.len)
+
+        def dump_data(self):
+            self.l.dump8(self.data_base, self.status.len)
+
     class TXBuf(Buf):
         CONTROL = 0
         CONTROL_OWNER_EMC = BIT(31)
@@ -353,6 +423,13 @@ class EMC(Block):
             self.len = len(data)
             self.l.write8(self.data_base, list(data))
 
+        def set_data_by_copy(self, addr, length):
+            self.len = length
+            self.l.copy8(self.data_base, addr, length)
+
+        def dump_data(self):
+            self.l.dump8(self.data_base, self.len)
+
     def set_cam(self, index, mac):
         self.write32(self.CAMxM[index], mac[5] << 24 | mac[4] << 16 | mac[3] << 8 | mac[2])
         self.write32(self.CAMxL[index], mac[1] << 24 | mac[0] << 16)
@@ -361,13 +438,15 @@ class EMC(Block):
     def init(self, buf_base=None):
         if not buf_base:
             if self.base == 0xb0002000:
-                buf_base = 0x100000
+                buf_base = self.BUFS_BASE
                 self.reset = self.clock = 6
                 self.mac = MAC(0xaa,0xbb,0xcc,0xdd,0xee,0x01)
+                self.ip = IP(10,0,1,1)
             elif self.base == 0xb0003000:
-                buf_base = 0x100000 + 2*self.BUFS_SIZE
+                buf_base = self.BUFS_BASE + 2*self.BUFS_SIZE
                 self.reset = self.clock = 7
                 self.mac = MAC(0xaa,0xbb,0xcc,0xdd,0xee,0x02)
+                self.ip = IP(10,0,1,2)
 
         # next buffer to use
         self.rx_head = 0
@@ -405,6 +484,28 @@ class EMC(Block):
         self.write32(self.DMARFC, self.FRAME_SIZE)
         self.write32(self.MCMDR, self.MCMDR_ACTIVE)
 
+        self.make_arp_packet(self.ARP_BASE)
+
+    def make_arp_packet(self, addr):
+        b = b''
+
+        # Ethernet header
+        b += MAC.broadcast.to_bytes()
+        b += self.mac.to_bytes()
+        b += struct.pack('>H', self.ETHERTYPE_ARP)
+
+        # ARP structure
+        b += struct.pack('>HHBBH', 1, self.ETHERTYPE_IP, 6, 4, 2)
+        b += self.mac.to_bytes() # sender
+        b += self.ip.to_bytes()
+        b += MAC.broadcast.to_bytes() # target
+        b += self.ip.to_bytes()
+
+        # push into memory
+        self.l.write8(addr, b)
+        self.arp_packet = addr
+        self.arp_packet_len = len(b)
+
     def dump_rx_descs(self):
         for desc in self.rx_bufs: desc.dump()
 
@@ -417,7 +518,17 @@ class EMC(Block):
     def advance_tx(self):
         self.tx_head = (self.tx_head + 1) % len(self.tx_bufs)
 
-    # get the next RX buffer that is ready. After use, buf.rearm() must be called.
+    # Get the next RX buffer that is ready, or return None.
+    # After use, buf.rearm() must be called.
+    def try_get_rx_buf(self):
+        self.write32(self.RSDR, 1)
+        buf = self.rx_bufs[self.rx_head]
+        buf.fetch_status()
+        if buf.status.is_ready():
+            self.advance_rx()
+            return buf
+
+    # Get the next RX buffer that is ready. After use, buf.rearm() must be called.
     def get_rx_buf(self):
         self.write32(self.RSDR, 1)
         buf = self.rx_bufs[self.rx_head]
@@ -432,9 +543,15 @@ class EMC(Block):
     def rx_frame(self):
         buf = self.get_rx_buf()
         data = buf.fetch_data()
-        self.l.dump8(buf.data_base, buf.status.len)
         buf.rearm()
         return data
+
+    def dump_frames(self):
+        while True:
+            buf = self.get_rx_buf()
+            buf.dump_data()
+            print()
+            buf.rearm()
 
     def get_tx_buf(self):
         buf = self.tx_bufs[self.tx_head]
@@ -454,6 +571,69 @@ class EMC(Block):
         buf.set_data(data)
         self.submit_tx_buf(buf)
 
+    def data_chunks(self, data):
+        ETH_OVERHEAD = 16
+        UDP_OVERHEAD = 28
+        TAG_OVERHEAD = 4
+        chunk_size = self.MTU - ETH_OVERHEAD - UDP_OVERHEAD
+        chunks = (len(data) + chunk_size - 1) // chunk_size
+        for i in range(chunks):
+            yield i, chunks, data[i*chunk_size : (i + 1)*chunk_size]
+
+    # Reply to an ARP packet. We already know that it's ARP.
+    def handle_arp(self, buf):
+        data = buf.fetch_data()[14:]
+
+        types = data[0:4]
+        op = data[6:8]
+        targetip = data[24:28]
+        if types == b'\x00\x01\x08\x00' and op == b'\x00\x01' and targetip == self.ip.to_bytes():
+            txbuf = self.get_tx_buf()
+            txbuf.set_data_by_copy(self.arp_packet, self.arp_packet_len)
+            self.submit_tx_buf(txbuf)
+
+    def arp_loop(self):
+        while True:
+            buf = self.get_rx_buf()
+            et = buf.fetch_ethertype()
+            print(hex(et))
+            if et == self.ETHERTYPE_ARP:
+                self.handle_arp(buf)
+            buf.rearm()
+
+    def push_data(self, addr, data):
+        magic = random.getrandbits(16)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect((str(self.ip), 450))
+        for i, n, chunk in self.data_chunks(data):
+            packet_done = False
+            good_tag = struct.pack('>HH', magic, i)
+            print(f'\rpacket {i + 1}/{n}...', end='')
+            while not packet_done:
+                buf = self.try_get_rx_buf()
+                if not buf:
+                    s.send(good_tag + chunk)  # TODO: retransmit only when necessary
+                    continue
+
+                ethertype = bswap16(self.l.read16(buf.data_base + 0xc))
+                if ethertype == self.ETHERTYPE_ARP:
+                    self.handle_arp(buf)
+                if ethertype == self.ETHERTYPE_IP:
+                    ip = self.l.read8(buf.data_base + 0x1e, 4)
+                    port = bswap16(self.l.read16(buf.data_base + 0x24))
+                    tag = self.l.read8(buf.data_base + 0x2a, 4)
+                    if ip == self.ip.to_bytes() and port == 450 and tag == good_tag:
+                        self.l.copy8(addr, buf.data_base + 0x2e, len(chunk))
+                        addr += len(chunk)
+                        packet_done = True
+                buf.rearm()
+        print(' done')
+
+    def push_file(self, addr, filename):
+        with open(filename, 'rb') as f:
+            data = f.read()
+            f.close()
+            self.push_data(addr, data)
 
 GCR = MC = USB = KCS = FIU = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
 PECI = GFXI = SSPI = Timers = AIC = GPIO = ADC = SDHC = ROM = Block
