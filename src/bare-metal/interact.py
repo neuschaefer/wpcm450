@@ -19,6 +19,12 @@ def bswap32(x):
     x = (x & 0xff00ff00) >>  8 | (x & 0x00ff00ff) <<  8
     return x
 
+def get_be16(data, offset):
+    return data[offset] << 8 | data[offset+1]
+
+def get_be32(data, offset):
+    return get_be16(data, offset) << 16 | get_be16(data, offset+2)
+
 class Lolmon:
     def __init__(self, device):
         self.device = device
@@ -176,6 +182,8 @@ class Lolmon:
         self.run_command_noreturn('call %x %d %d %d %d' % (addr, a, b, c, d))
 
     def call_linux_and_run_microcom(self, addr):
+        emc0.stop() # No DMA please!
+        emc1.stop()
         self.call(addr, 0, 0xffffffff, 0)
         os.system(f'busybox microcom -s 115200 /dev/ttyUSB0')
 
@@ -311,7 +319,7 @@ class EMC(Block):
     BUF_SIZE = 0x800     # enough for 1 packet and descriptor
     FRAME_SIZE = 0x600   # max. bytes per frame
     BUFS_SIZE = 0x8000   # memory for all buffers per EMC and direction
-    MTU = 1420           # max. number of bytes that we'd actually put in a frame
+    MTU = 1500           # max. number of bytes that we'd actually put in a frame
 
     ETHERTYPE_ARP = 0x806
     ETHERTYPE_IP  = 0x800
@@ -343,6 +351,7 @@ class EMC(Block):
             OWNER_ARM = 0x00000000
             MISC_MASK = 0x3fff0000
             LEN_MASK = 0x0000ffff
+            RXGD = BIT(20)
 
             def __init__(self, raw):
                 self.raw = raw
@@ -356,6 +365,9 @@ class EMC(Block):
             def __repr__(self):
                 owner = 'ARM' if self.owner == self.OWNER_ARM else 'EMC'
                 return 'RXBuf.Status(%s, 0x%04x, %d)' % (owner, self.misc, self.len)
+
+            def is_good(self):
+                return bool(self.raw & self.RXGD)
 
         def write_initial(self):
             self.l.write32(self.base + self.SL, self.Status.OWNER_EMC)
@@ -506,6 +518,12 @@ class EMC(Block):
         self.arp_packet = addr
         self.arp_packet_len = len(b)
 
+    def stop(self):
+        # initiate software reset
+        self.write32(self.MCMDR, self.MCMDR_SWR)
+        while self.read32(self.MCMDR) & self.MCMDR_SWR:
+            pass
+
     def dump_rx_descs(self):
         for desc in self.rx_bufs: desc.dump()
 
@@ -530,14 +548,10 @@ class EMC(Block):
 
     # Get the next RX buffer that is ready. After use, buf.rearm() must be called.
     def get_rx_buf(self):
-        self.write32(self.RSDR, 1)
-        buf = self.rx_bufs[self.rx_head]
         while True:
-            buf.fetch_status()
-            if buf.status.is_ready():
-                break
-        self.advance_rx()
-        return buf
+            buf = self.try_get_rx_buf()
+            if buf:
+                return buf
 
     # receive a frame, as data
     def rx_frame(self):
@@ -572,10 +586,10 @@ class EMC(Block):
         self.submit_tx_buf(buf)
 
     def data_chunks(self, data):
-        ETH_OVERHEAD = 16
+        ETH_OVERHEAD = 14
         UDP_OVERHEAD = 28
         TAG_OVERHEAD = 4
-        chunk_size = self.MTU - ETH_OVERHEAD - UDP_OVERHEAD
+        chunk_size = self.MTU - ETH_OVERHEAD - UDP_OVERHEAD - TAG_OVERHEAD
         chunks = (len(data) + chunk_size - 1) // chunk_size
         for i in range(chunks):
             yield i, chunks, data[i*chunk_size : (i + 1)*chunk_size]
@@ -609,20 +623,26 @@ class EMC(Block):
             packet_done = False
             good_tag = struct.pack('>HH', magic, i)
             print(f'\rpacket {i + 1}/{n}...', end='')
+            s.send(good_tag + chunk)
             while not packet_done:
                 buf = self.try_get_rx_buf()
                 if not buf:
-                    s.send(good_tag + chunk)  # TODO: retransmit only when necessary
+                    # retransmit only when necessary
+                    s.send(good_tag + chunk)
+                    continue
+                if not buf.status.is_good():
+                    buf.rearm()
                     continue
 
-                ethertype = bswap16(self.l.read16(buf.data_base + 0xc))
+                header = self.l.read8(buf.data_base, 0x30)
+                ethertype = get_be16(header, 0xc)
                 if ethertype == self.ETHERTYPE_ARP:
                     self.handle_arp(buf)
                 if ethertype == self.ETHERTYPE_IP:
-                    ip = self.l.read8(buf.data_base + 0x1e, 4)
-                    port = bswap16(self.l.read16(buf.data_base + 0x24))
-                    tag = self.l.read8(buf.data_base + 0x2a, 4)
-                    if ip == self.ip.to_bytes() and port == 450 and tag == good_tag:
+                    ip = get_be32(header, 0x1e)
+                    port = get_be16(header, 0x24)
+                    tag = header[0x2a:0x2e]
+                    if ip == self.ip.to_int() and port == 450 and tag == good_tag:
                         self.l.copy8(addr, buf.data_base + 0x2e, len(chunk))
                         addr += len(chunk)
                         packet_done = True
