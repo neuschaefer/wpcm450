@@ -293,6 +293,7 @@ class EMC(Block):
     MCMDR_SWR = BIT(24)
     MIID = 0x94
     MIIDA = 0x98
+    MIIDA_BUSY = BIT(17)
     FFTCR = 0x9c
     TSDR = 0xa0
     RSDR = 0xa4
@@ -655,7 +656,40 @@ class EMC(Block):
             f.close()
             self.push_data(addr, data)
 
-GCR = MC = USB = KCS = FIU = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
+    def get_mdccr(self):
+        return (self.read32(self.MIIDA) >> 20) & 0xf
+
+    def set_mdccr(self, value):
+        miida = self.read32(emc0.MIIDA) & ~(0xf << 20)
+        self.write32(self.MIIDA, miida | (value << 20))
+
+    def mdio_do(self, phy, reg, write):
+        assert phy in range(0x20)
+        assert reg in range(0x20)
+        write = int(bool(write))
+        miida = self.read32(self.MIIDA) & ~0xffff
+        miida |= self.MIIDA_BUSY | write << 16 | phy << 8 | reg
+        self.write32(self.MIIDA, miida)
+        while self.read32(self.MIIDA) & self.MIIDA_BUSY:
+            pass
+
+    def mdio_read(self, phy, reg):
+        self.mdio_do(phy, reg, False)
+        return self.read32(self.MIID)
+
+    def mdio_write(self, phy, reg, value):
+        self.write32(self.MIID, value)
+        self.mdio_do(phy, reg, True)
+
+
+class GCR(Block):
+    PDID = 0
+    PWRON = 4
+    MFSEL1 = 0xc
+    MFSEL2 = 0x10
+
+
+MC = USB = KCS = FIU = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
 PECI = GFXI = SSPI = Timers = AIC = GPIO = ADC = SDHC = ROM = Block
 
 
