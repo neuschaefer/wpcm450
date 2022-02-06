@@ -688,8 +688,116 @@ class GCR(Block):
     MFSEL1 = 0xc
     MFSEL2 = 0x10
 
+class FIU(Block):
+    FIU_CFG = 0
+    BURST_CFG = 1
+    RESP_CFG = 2
+    CFBB_PROT = 3
+    FWIN1_LOW = 4
+    FWIN1_HIGH = 6
+    FWIN2_LOW = 8
+    FWIN2_HIGH = 0xa
+    FWIN3_LOW = 0xc
+    FWIN3_HIGH = 0xe
+    FWIN_LOW = { 1: FWIN1_LOW, 2: FWIN2_LOW, 3: FWIN3_LOW }
+    FWIN_HIGH = { 1: FWIN1_HIGH, 2: FWIN2_HIGH, 3: FWIN3_HIGH }
+    PROT_LOCK = 0x10
+    PROT_CLEAR = 0x11
+    SPI_FL_CFG = 0x14
+    SPI_TIM = 0x15
+    UMA_CODE = 0x16
+    UMA_AB0 = 0x17
+    UMA_AB1 = 0x18
+    UMA_AB2 = 0x19
+    UMA_DB0 = 0x1a
+    UMA_DB1 = 0x1b
+    UMA_DB2 = 0x1c
+    UMA_DB3 = 0x1d
+    UMA_CTS = 0x1e
+    CTS_EXEC_DONE = BIT(7)
+    CTS_DEV_NUM_SHIFT = 5
+    CTS_RD_WR = BIT(4)
+    CTS_A_SIZE = BIT(3)
+    CTS_D_SIZE_SHIFT = 0
+    UMA_ECTS = 0x1f
 
-MC = USB = KCS = FIU = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
+    MMFLASH_BASE = 0xc0000000
+
+    def __init__(self, lolmon, base=None):
+        super().__init__(lolmon, base)
+        self.cs = 0
+
+    def dump(self):
+        self.l.dump8(self.base, 0x20)
+
+    def get_fwin(self, i):
+        return self.read16(self.FWIN_LOW[i]) * 0x1000, self.read16(self.FWIN_HIGH[i]) * 0x1000
+
+    def any_fwin_contains(self, x):
+        return any([x in range(*fiu.get_fwin(i)) for i in [1, 2, 3]])
+
+    def set_fwin(self, i, low, high):
+        self.write16(self.FWIN_LOW[i], low // 0x1000)
+        self.write16(self.FWIN_HIGH[i], high // 0x1000)
+
+    def get_uma_code(self):
+        return self.read8(self.UMA_CODE)
+
+    def set_uma_code(self, code):
+        self.write8(self.UMA_CODE, code)
+
+    def get_uma_addr(self):
+        a  = self.read8(self.UMA_AB0)
+        a |= self.read8(self.UMA_AB1) <<  8
+        a |= self.read8(self.UMA_AB2) << 16
+        return a
+
+    def set_uma_addr(self, a):
+        self.write8(self.UMA_AB0, a & 0xff)
+        self.write8(self.UMA_AB1, (a >> 8) & 0xff)
+        self.write8(self.UMA_AB2, (a >> 16) & 0xff)
+
+    def get_uma_data(self):
+        return [self.read8(self.UMA_DB0),
+                self.read8(self.UMA_DB1),
+                self.read8(self.UMA_DB2),
+                self.read8(self.UMA_DB3)]
+
+    def do_uma(self, write, use_addr, data_len):
+        cts = self.CTS_EXEC_DONE | (self.cs << self.CTS_DEV_NUM_SHIFT) | (data_len << self.CTS_D_SIZE_SHIFT)
+        if use_addr:
+            cts |= self.CTS_A_SIZE
+        if write:
+            cts |= self.CTS_RD_WR
+        self.write8(self.UMA_CTS, cts)
+        while self.read8(self.UMA_CTS) & self.CTS_EXEC_DONE:
+            print('lol')
+
+    def rdid(self):
+        self.set_uma_code(0x9f)
+        self.do_uma(False, False, 3)
+        return self.get_uma_data()[:3]
+
+    # [Macronix] Write Enable
+    def wren(self):
+        self.set_uma_code(0x06)
+        self.do_uma(False, False, 0)
+
+    # [Macronix] Sector Erase
+    def erase4k(self, addr, cs=0):
+        self.wren()
+        self.write8(self.UMA_CODE, 0x20)
+        self.set_uma_addr(addr)
+        self.do_uma(False, True, 0)
+
+    def prog8(self, addr, data):
+        addr = addr & 0xffffff
+        assert self.any_fwin_contains(addr)
+        self.wren()
+        self.l.write8(addr | self.MMFLASH_BASE, data)
+
+
+MC = USB = KCS = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
 PECI = GFXI = SSPI = Timers = AIC = GPIO = ADC = SDHC = ROM = Block
 
 
