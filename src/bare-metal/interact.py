@@ -846,7 +846,7 @@ class FIU(Block):
         return self.get_uma_data()
 
 
-MC = USB = KCS = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
+MC = USB = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
 PECI = GFXI = SSPI = Timers = AIC = GPIO = ADC = SDHC = ROM = Block
 
 
