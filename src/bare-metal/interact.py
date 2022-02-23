@@ -773,10 +773,17 @@ class FIU(Block):
         while self.read8(self.UMA_CTS) & self.CTS_EXEC_DONE:
             print('lol')
 
+    # Read chip ID
     def rdid(self):
         self.set_uma_code(0x9f)
         self.do_uma(False, False, 3)
         return self.get_uma_data()[:3]
+
+    # Read status register
+    def rsr(self):
+        self.set_uma_code(0x05)
+        self.do_uma(False, False, 1)
+        return self.get_uma_data()[0]
 
     # Write Enable
     def wren(self):
@@ -789,6 +796,12 @@ class FIU(Block):
         self.set_uma_code(0x20)
         self.set_uma_addr(addr)
         self.do_uma(False, True, 0)
+
+        # Poll until the erase is done.
+        #   On Winbond: RSR-1.BUSY
+        #   On Macronix: SR.WIP
+        while self.rsr() & 0x01:
+            pass
 
     # program at 8-bit width
     def prog8(self, addr, data):
@@ -804,7 +817,7 @@ class FIU(Block):
 
     def prog8_as_needed(self, addr, data):
         addr = addr & 0xffffff
-        fdata = self.l.read8(addr | self.MMFLASH_BASE, len(data))
+        fdata = self.mm_read(len(data))
         for i in range(len(data)):
             if fdata[i] != data[i]:
                 self.prog8(addr+i, data[i])
@@ -815,7 +828,7 @@ class FIU(Block):
         addr = addr & 0xffffff
         assert addr & 0xfff == 0
         assert len(data) <= 0x1000
-        fdata = self.l.read8(addr | self.MMFLASH_BASE, len(data))
+        fdata = self.mm_read(len(data))
         for i in range(len(data)):
             if ~fdata[i] & data[i]:
                 return True
@@ -830,6 +843,14 @@ class FIU(Block):
             if self.page_needs_erase(addr+p, pdata):
                 self.erase4k(addr+p)
             self.prog8_as_needed(addr+p, pdata)
+
+    def mm_read(self, addr, data_len):
+        addr = addr & 0xffffff
+        return self.l.read8(addr | self.MMFLASH_BASE, data_len)
+
+    def mm_dump(self, addr, data_len):
+        addr = addr & 0xffffff
+        return self.l.dump8(addr | self.MMFLASH_BASE, data_len)
 
     # perform READ using UMA
     def uma_read(self, addr, data_len=4):
