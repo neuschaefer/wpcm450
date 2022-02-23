@@ -778,23 +778,72 @@ class FIU(Block):
         self.do_uma(False, False, 3)
         return self.get_uma_data()[:3]
 
-    # [Macronix] Write Enable
+    # Write Enable
     def wren(self):
         self.set_uma_code(0x06)
         self.do_uma(False, False, 0)
 
-    # [Macronix] Sector Erase
+    # Sector Erase
     def erase4k(self, addr, cs=0):
         self.wren()
-        self.write8(self.UMA_CODE, 0x20)
+        self.set_uma_code(0x20)
         self.set_uma_addr(addr)
         self.do_uma(False, True, 0)
 
+    # program at 8-bit width
     def prog8(self, addr, data):
         addr = addr & 0xffffff
-        assert self.any_fwin_contains(addr)
-        self.wren()
-        self.l.write8(addr | self.MMFLASH_BASE, data)
+        if isinstance(data, list) or isinstance(data, bytes):
+            for i, d in enumerate(data):
+                self.prog8(addr+i, d)
+        else:
+            assert self.any_fwin_contains(addr)
+            print("prog %06x = %2x" % (addr, data))
+            self.wren()
+            self.l.write8(addr | self.MMFLASH_BASE, data)
+
+    def prog8_as_needed(self, addr, data):
+        addr = addr & 0xffffff
+        fdata = self.l.read8(addr | self.MMFLASH_BASE, len(data))
+        for i in range(len(data)):
+            if fdata[i] != data[i]:
+                self.prog8(addr+i, data[i])
+
+    # If the flash has any bits cleared that are set in the new data, we need
+    # an erase to set these bits again.
+    def page_needs_erase(self, addr, data):
+        addr = addr & 0xffffff
+        assert addr & 0xfff == 0
+        assert len(data) <= 0x1000
+        fdata = self.l.read8(addr | self.MMFLASH_BASE, len(data))
+        for i in range(len(data)):
+            if ~fdata[i] & data[i]:
+                return True
+        return False
+
+    # erase/reprogram a page or more as needed
+    def flash(self, addr, data):
+        addr = addr & 0xffffff
+        assert addr & 0xfff == 0
+        for p in range(0, len(data), 0x1000):
+            pdata = data[p:p+0x1000]
+            if self.page_needs_erase(addr+p, pdata):
+                self.erase4k(addr+p)
+            self.prog8_as_needed(addr+p, pdata)
+
+    # perform READ using UMA
+    def uma_read(self, addr, data_len=4):
+        self.set_uma_code(0x03)
+        self.set_uma_addr(addr)
+        self.do_uma(False, True, data_len)
+        return self.get_uma_data()
+
+    # perform FAST READ using UMA. FIU automatically inserts the dummy byte
+    def uma_fast_read(self, addr, data_len=4):
+        self.set_uma_code(0x0b)
+        self.set_uma_addr(addr)
+        self.do_uma(False, True, data_len)
+        return self.get_uma_data()
 
 
 MC = USB = KCS = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
