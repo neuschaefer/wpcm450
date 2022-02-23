@@ -35,11 +35,10 @@ reset:
 	#   Instruction cache may be on or off.
 	#   Data cache must be off.
 
-	# Leave IRQ and FIQ unchanged. They can be useful, but only if the
-	# previous-stage bootloader didn't expect interrupts.
-	#mrs	r0, cpsr
-	#bic	r0, #0xc0
-	#msr	cpsr, r0
+	# Disable IRQ and FIQ.
+	mrs	r0, cpsr
+	bic	r0, #0xc0
+	msr	cpsr, r0
 
 	# Disable data cache and MMU, use low vector base
 	mrc	p15, 0, r0, c1, c0, 0
