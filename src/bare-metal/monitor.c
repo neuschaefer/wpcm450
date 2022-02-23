@@ -20,6 +20,41 @@ static void write32(unsigned long addr, uint32_t value) { *(volatile uint32_t *)
 /* UART driver */
 
 #define UART_BASE 0xb8000000
+#define MFSEL1    0xb000000c
+#define GPIO_BASE 0xb8003000
+#define CLK_BASE  0xb0000200
+
+static void uart_init(void)
+{
+	/* Configure UART clock to a know-good state */
+	uint32_t clksel = read32(CLK_BASE + 4);
+	write32(CLK_BASE + 4, (clksel & ~0x30) | 0x20); // CLKSEL.UARTCKSEL = 48 MHz
+	uint32_t clken = read32(CLK_BASE + 0);
+	write32(CLK_BASE + 0, clken | (1 << 11));       // CLKEN.UART0 = enable
+
+	/*
+	 * Set divisor to 13 (24MHz / 16 / 13 = 115384Hz. Close enough.)
+	 * The -2 is a Nuvoton-specific quirk.
+	 */
+	write32(UART_BASE + 0x0c, 0x80);   // enable divisor latch
+	write32(UART_BASE + 0x00, 13 - 2); // low byte
+	write32(UART_BASE + 0x04, 0);      // high byte
+	write32(UART_BASE + 0x0c, 0x03);   // disable divisor latch; set 8n1
+
+	/* Clear and initialize UART FIFOs */
+	write32(UART_BASE + 0x08, 0x87);   // RX trigger = 8 bytes; Reset/enable both FIFOs
+
+	/* Disable timeout interrupt */
+	write32(UART_BASE + 0x1c, 0);
+
+	/* Set MFSEL1.BSPSEL to enable UART0 pinmux */
+	uint32_t mfsel1 = read32(MFSEL1);
+	write32(MFSEL1, mfsel1 | (1 << 9));
+
+	/* Make sure BSP (debug UART) pins (GPIO2.9/10) are not outputs, for good measure */
+	uint32_t gpio2cfg0 = read32(GPIO_BASE + 0x3c);
+	write32(GPIO_BASE + 0x3c, gpio2cfg0 & ~(3 << 9));
+}
 
 static int uart_can_tx(void)
 {
@@ -43,23 +78,6 @@ static char uart_rx(void)
 	while (!uart_can_rx())
 		;
 	return read32(UART_BASE + 0);
-}
-
-#define MFSEL1 0xb000000c
-static void uart_init(void)
-{
-	/* Set MFSEL1.BSPSEL to enable UART0 pinmux */
-	uint32_t mfsel1 = read32(MFSEL1);
-	write32(MFSEL1, mfsel1 | (1 << 9));
-
-	/*
-	 * Set divisor to 13 (24MHz / 16 / 13 = 115384Hz. Close enough.)
-	 * The -2 is a Nuvoton-specific quirk.
-	 */
-	write32(UART_BASE + 0x0c, 0x80);   // enable divisor latch
-	write32(UART_BASE + 0x00, 13 - 2); // low byte
-	write32(UART_BASE + 0x04, 0);      // high byte
-	write32(UART_BASE + 0x0c, 0x03);   // disable divisor latch; set 8n1
 }
 
 
