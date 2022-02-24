@@ -115,6 +115,12 @@ class Lolmon:
     def write16(self, addr, value): return self.writeX('wh', 2, addr, value)
     def write32(self, addr, value): return self.writeX('ww', 4, addr, value)
 
+    def write_file(self, addr, filename):
+        with open(filename, 'rb') as f:
+            data = f.read()
+            f.close()
+            self.write8(addr, data)
+
     def memset(self, addr, value, size):
         value16 = value << 8 | value
         value32 = value16 << 16 | value16

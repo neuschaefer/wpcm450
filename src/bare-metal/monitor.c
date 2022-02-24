@@ -5,6 +5,8 @@
 #include <stddef.h>
 
 #define ARRAY_LENGTH(a) (sizeof(a) / sizeof((a)[0]))
+#define BIT(x) (1ULL << (x))
+#define min(a,b) (((a) < (b))? (a) : (b))
 
 /* MMIO accessors */
 
@@ -262,6 +264,144 @@ static bool parse_int(const char *s, uint32_t base, uint32_t *result)
 }
 
 
+/* FIU driver */
+
+#define MMFLASH_BASE	0xc0000000
+#define FIU_BASE	0xc8000000
+#define FIU_FWIN1_LOW	(FIU_BASE + 4)
+#define FIU_FWIN1_HIGH	(FIU_BASE + 6)
+#define FIU_UMA_CODE	(FIU_BASE + 0x16)
+#define FIU_UMA_CODE	(FIU_BASE + 0x16)
+#define FIU_UMA_AB0	(FIU_BASE + 0x17)
+#define FIU_UMA_AB1	(FIU_BASE + 0x18)
+#define FIU_UMA_AB2	(FIU_BASE + 0x19)
+#define FIU_UMA_DB0	(FIU_BASE + 0x1a)
+#define FIU_UMA_DB1	(FIU_BASE + 0x1b)
+#define FIU_UMA_DB2	(FIU_BASE + 0x1c)
+#define FIU_UMA_DB3	(FIU_BASE + 0x1d)
+#define FIU_UMA_CTS	(FIU_BASE + 0x1e)
+
+#define CTS_EXEC_DONE	BIT(7)
+#define CTS_DEV_NUM_SHIFT 5
+#define CTS_RD_WR	BIT(4)
+#define CTS_A_SIZE	BIT(3)
+#define CTS_D_SIZE_SHIFT 0
+
+static void fiu_set_uma_code(uint8_t code)
+{
+	write8(FIU_UMA_CODE, code);
+}
+
+static void fiu_set_uma_addr(size_t a)
+{
+	write8(FIU_UMA_AB0, a & 0xff);
+	write8(FIU_UMA_AB1, (a >> 8) & 0xff);
+	write8(FIU_UMA_AB2, (a >> 16) & 0xff);
+}
+
+static void fiu_do_uma(bool write, bool use_addr, size_t data_len)
+{
+	uint8_t cts = CTS_EXEC_DONE | (0 << CTS_DEV_NUM_SHIFT) | (data_len << CTS_D_SIZE_SHIFT);
+	if (use_addr)
+		cts |= CTS_A_SIZE;
+	if (write)
+		cts |= CTS_RD_WR;
+	write8(FIU_UMA_CTS, cts);
+	while (read8(FIU_UMA_CTS) & CTS_EXEC_DONE)
+		;
+}
+
+/* Read status register */
+static uint8_t fiu_rsr(void)
+{
+	fiu_set_uma_code(0x05);
+	fiu_do_uma(false, false, 1);
+	return read8(FIU_UMA_DB0);
+}
+
+/* Poll the Write-in-progress/BUSY bit */
+static void fiu_poll_wip(void)
+{
+	while (fiu_rsr() & 1)
+		;
+}
+
+/* Write Enable */
+static void fiu_wren(void)
+{
+	fiu_set_uma_code(0x06);
+	fiu_do_uma(false, false, 0);
+}
+
+/* Sector Erase (4 KiB) */
+static void fiu_erase4k(uint32_t addr)
+{
+        fiu_wren();
+        fiu_set_uma_code(0x20);
+        fiu_set_uma_addr(addr);
+        fiu_do_uma(false, true, 0);
+
+	fiu_poll_wip();
+}
+
+static void fiu_prog8(uint32_t addr, uint8_t data)
+{
+	fiu_wren();
+	write8(addr | MMFLASH_BASE, data);
+
+	fiu_poll_wip();
+
+	if (read8(addr | MMFLASH_BASE) != data) {
+		putstr("Flash programming error at ");
+		put_hex32(addr);
+		putstr(", ");
+		put_hex8(read8(addr | MMFLASH_BASE));
+		putstr(" != ");
+		put_hex8(data);
+		putchar('\n');
+	}
+}
+
+static void fiu_prog8_as_needed(uint32_t addr, const uint8_t *data, size_t data_len)
+{
+	for (int i = 0; i < data_len; i++)
+		if (read8(MMFLASH_BASE + addr+i) != data[i])
+			fiu_prog8(addr+i, data[i]);
+}
+
+static bool fiu_page_needs_erase(uint32_t addr, const uint8_t *data, size_t count)
+{
+	/* If the flash has any bits cleared that are set in the new data, we
+	   need an erase to set these bits again. */
+	for (size_t i = 0; i < count; i++)
+		if (~read8(MMFLASH_BASE+addr+i) & data[i])
+			return true;
+
+	return false;
+}
+
+static void fiu_flash(const uint8_t *data, uint32_t addr, size_t count)
+{
+	uint16_t fwin1_low = read16(FIU_FWIN1_LOW);
+	uint16_t fwin1_high = read16(FIU_FWIN1_HIGH);
+
+	write16(FIU_FWIN1_LOW, addr / 0x1000);
+	write16(FIU_FWIN1_HIGH, (addr + count + 0xfff) / 0x1000);
+
+	for (size_t p = 0; p < count; p += 0x1000) {
+		size_t chunk = min(0x1000, count - p);
+
+		if (fiu_page_needs_erase(addr+p, data+p, chunk))
+			fiu_erase4k(addr+p);
+
+		fiu_prog8_as_needed(addr+p, data+p, chunk);
+	}
+
+	write16(FIU_FWIN1_LOW, fwin1_low);
+	write16(FIU_FWIN1_HIGH, fwin1_high);
+}
+
+
 /* Command interpreter */
 
 struct command {
@@ -464,6 +604,31 @@ static void cmd_copy(int argc, char **argv)
 	}
 }
 
+static void cmd_flash(int argc, char **argv)
+{
+	size_t src, dest, count;
+
+	if (argc != 4) {
+		puts("Usage error");
+		return;
+	}
+
+	if (!parse_int(argv[1], 16, &src))
+		return;
+	if (!parse_int(argv[2], 16, &dest))
+		return;
+	if (!parse_int(argv[3], 0, &count))
+		return;
+
+	/* The destination address must be 4 KiB aligned and fit into 16 MiB. */
+	if (dest & 0xff000fff) {
+		puts("Usage error");
+		return;
+	}
+
+	fiu_flash((const uint8_t *)src, dest, count);
+}
+
 void instruction_memory_barrier(void);
 static void cmd_imb(int argc, char **argv)
 {
@@ -545,6 +710,7 @@ static const struct command commands[] = {
 	{ "cb", "source destination count", "Copy one or more bytes", cmd_copy },
 	{ "ch", "source destination count", "Copy one or more half-words (16-bit)", cmd_copy },
 	{ "cw", "source destination count", "Copy one or more words (32-bit)", cmd_copy },
+	{ "fl", "source destination count", "Write data to flash; destination must be 4k-aligned", cmd_flash },
 	{ "imb", "", "Instruction memory barrier", cmd_imb },
 	{ "call", "address [up to 3 args]", "Call a function by address", cmd_call },
 	{ "src", "address", "Source/run script at address", cmd_src },
