@@ -626,6 +626,11 @@ static void cmd_flash(int argc, char **argv)
 		return;
 	}
 
+	if (count > 0x1000000 || dest + count > 0x1000000) {
+		puts("Too big");
+		return;
+	}
+
 	fiu_flash((const uint8_t *)src, dest, count);
 }
 
