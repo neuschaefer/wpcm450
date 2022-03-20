@@ -218,13 +218,115 @@ class Block:
 class Clocks(Block):
     CLKEN     = 0x00
     CLKSEL    = 0x04
+    CLKDIV    = 0x08
+    PLLCON0   = 0x0c
+    PLLCON1   = 0x10
     IPSRST    = 0x20
+
+    CLKSEL_CPU_SHIFT    = 0
+    CLKSEL_CPU_MASK     = 3
+    CLKSEL_USBPHY_SHIFT = 6
+    CLKSEL_USBPHY_MASK  = 3
+    CLKSEL_UART_SHIFT   = 8
+    CLKSEL_UART_MASK    = 3
+
+    CLKDIV_AHB3_SHIFT   = 8
+    CLKDIV_AHB3_MASK    = 3
+    CLKDIV_UART_SHIFT   = 16
+    CLKDIV_UART_MASK    = 15
+    CLKDIV_AHB_SHIFT    = 24
+    CLKDIV_AHB_MASK     = 3
+    CLKDIV_APB_SHIFT    = 26
+    CLKDIV_APB_MASK     = 3
+    CLKDIV_ADC_SHIFT    = 28
+    CLKDIV_ADC_MASK     = 3
+
+    PLLCON_PRST         = BIT(13)
+    PLLCON_INDV_SHIFT   = 0
+    PLLCON_INDV_MASK    = 0x3f
+    PLLCON_OTDV_SHIFT   = 8
+    PLLCON_OTDV_MASK    = 0x07
+    PLLCON_FBDV_SHIFT   = 16
+    PLLCON_FBDV_MASK    = 0x1ff
 
     def reset(self, line, value):
         self.setclr32(self.IPSRST, line, value)
 
     def clken(self, line, value):
         self.setclr32(self.CLKEN, line, value)
+
+    def rate_ref(self):
+        return 48000000
+
+    def pllcon_to_rate(self, pllcon):
+        if pllcon & self.PLLCON_PRST:
+            return 0
+        indv = (pllcon >> self.PLLCON_INDV_SHIFT) & self.PLLCON_INDV_MASK
+        otdv = (pllcon >> self.PLLCON_OTDV_SHIFT) & self.PLLCON_OTDV_MASK
+        fbdv = (pllcon >> self.PLLCON_FBDV_SHIFT) & self.PLLCON_FBDV_MASK
+        return int(self.rate_ref() / (indv+1) * (fbdv+1) / (otdv+1))
+
+    def rate_pll0(self): return self.pllcon_to_rate(self.read32(self.PLLCON0))
+    def rate_pll1(self): return self.pllcon_to_rate(self.read32(self.PLLCON1))
+
+    def rate_select(self, shift):
+        sources = [ self.rate_pll0, self.rate_pll1, self.rate_ref ]
+        return sources[(self.read32(self.CLKSEL) >> shift) & 3]()
+
+    def rate_cpu(self):    return self.rate_select(self.CLKSEL_CPU_SHIFT) // 2
+    def rate_clkout(self): return self.rate_select(self.CLKSEL_CLKOUT_SHIFT)
+    def rate_usbphy(self): return self.rate_select(self.CLKSEL_USBPHY_SHIFT)
+
+    def rate_uart(self):
+        div = (self.read32(self.CLKDIV) >> self.CLKDIV_UART_SHIFT) & self.CLKDIV_UART_MASK
+        return self.rate_select(self.CLKSEL_UART_SHIFT) // (div + 1)
+
+    def div(self, shift):
+        div = (self.read32(self.CLKDIV) >> shift) & 3
+        return [ 1, 2, 4, 8 ][div]
+
+    def rate_ahb(self):  return self.rate_cpu() // self.div(self.CLKDIV_AHB_SHIFT)
+    def rate_ahb3(self): return self.rate_ahb() // self.div(self.CLKDIV_AHB3_SHIFT)
+    def rate_apb(self):  return self.rate_ahb() // self.div(self.CLKDIV_APB_SHIFT)
+    def rate_adc(self):  return self.rate_ref() // self.div(self.CLKDIV_ADC_SHIFT)
+
+    def set_div(self, shift, div):
+        table = { 2**n: n for n in range(4) }
+        x = self.read32(self.CLKDIV)
+        x &= ~(3 << shift)
+        x |= table[div] << shift
+        self.write32(self.CLKDIV, x)
+
+    def set_sel(self, shift, parent):
+        table = { 'pll0': 0, 'pll1': 1, 'ref': 2 }
+        x = self.read32(self.CLKSEL)
+        x &= ~(3 << shift)
+        x |= table[parent] << shift
+        self.write32(self.CLKSEL, x)
+
+    def summary(self):
+        print(f'Clock summary:')
+        print(f'  REF:      {self.rate_ref()   :10} Hz')
+        print(f'  PLL0:     {self.rate_pll0()  :10} Hz')
+        print(f'  PLL1:     {self.rate_pll1()  :10} Hz')
+        print(f'  CPU:      {self.rate_cpu()   :10} Hz')
+        print(f'  USBPHY:   {self.rate_usbphy():10} Hz')
+        print(f'  UART:     {self.rate_uart()  :10} Hz')
+        print(f'  AHB:      {self.rate_ahb()   :10} Hz')
+        print(f'  AHB3:     {self.rate_ahb3()  :10} Hz')
+        print(f'  APB:      {self.rate_apb()   :10} Hz')
+        print(f'  ADC:      {self.rate_adc()   :10} Hz')
+
+    def make_cpu_slow(self):
+        # Copy PLL0 configuration to PLL1, but divide by 2
+        pllcon0 = self.read32(self.PLLCON0)
+        self.write32(self.PLLCON1, pllcon0 | (1 << self.PLLCON_OTDV_SHIFT))
+        print(f"PLL0 at {self.rate_pll0()} Hz, PLL1 at {self.rate_pll1()} Hz")
+
+        # Switch CPU clock to PLL1
+        self.set_sel(self.CLKSEL_CPU_SHIFT, 'pll1')
+        print(f"AHB3 now at {self.rate_ahb3()}")
+
 
 class SHM(Block):
     def dump(self):
