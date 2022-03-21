@@ -974,6 +974,58 @@ class FIU(Block):
         self.do_uma(False, True, data_len)
         return self.get_uma_data()
 
+    def uma_assert(self):
+        x = self.read8(self.UMA_ECTS)
+        x &= ~BIT(self.cs)
+        self.write8(self.UMA_ECTS, x)
+
+    def uma_deassert(self):
+        x = self.read8(self.UMA_ECTS)
+        x |= BIT(self.cs)
+        self.write8(self.UMA_ECTS, x)
+
+    def hello_la(self):
+        # Pulse the CS# line to give my logic analyzer a chance to listen up
+        self.uma_assert()
+        self.uma_deassert()
+
+    def set_read_burst(self, burst):
+        table = { 1: 0, 16: 3 }
+        x = self.read8(self.BURST_CFG)
+        x &= ~3
+        x |= table[burst]
+        self.write8(self.BURST_CFG, x)
+
+    def safe_uma(self, code, write, use_addr, data_len):
+        # let the SPI flash think this is a read
+        self.uma_assert()
+        self.set_uma_code(0x03)
+        self.do_uma(False, False, 0)
+
+        # now for the main act
+        self.set_uma_code(code)
+        self.do_uma(write, use_addr, data_len)
+
+        # the end
+        self.uma_deassert()
+
+    def uma_dummy_test(self):
+        # The pattern:
+        # (R) C
+        # (W) C
+        # (R) C A
+        # (W) C A
+        # (R) C D D D D
+        # (W) C D D D D
+        # (R) C A D D D D
+        # (W) C A D D D D
+        for code in [0x03, 0x0b]:
+            for data_len in [0, 4]:
+                for use_addr in [0, 1]:
+                    for write in [0, 1]:
+                        self.set_uma_addr(0x112233)
+                        self.safe_uma(code, write, use_addr, data_len)
+
 
 MC = USB = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
 PECI = GFXI = SSPI = Timers = AIC = GPIO = ADC = SDHC = ROM = Block
