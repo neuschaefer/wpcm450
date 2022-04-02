@@ -131,6 +131,11 @@ static void watchdog_reset()
 	write32(WTCR, 0x82);
 }
 
+static void watchdog_disable()
+{
+	write32(WTCR, 0);
+}
+
 
 /* Console I/O functions */
 
@@ -940,6 +945,7 @@ static void main_loop(void)
 
 void main(void)
 {
+	watchdog_disable();
 	uart_init();
 
 	puts("Press any key to avoid running the default boot script");
