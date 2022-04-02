@@ -789,6 +789,13 @@ class EMC(Block):
         self.write32(self.MIID, value)
         self.mdio_do(phy, reg, True)
 
+    def mdio_scan(self):
+        for phy in range(0x20):
+            hi = self.mdio_read(phy, 2)
+            lo = self.mdio_read(phy, 3)
+            if hi != 0xffff:
+                print('MDIO @ %d, device %04x:%04x' % (phy, hi, lo))
+
 
 class GCR(Block):
     PDID = 0
