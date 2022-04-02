@@ -786,8 +786,11 @@ class EMC(Block):
         miida = self.read32(self.MIIDA) & ~0xffff
         miida |= self.MIIDA_BUSY | write << 16 | phy << 8 | reg
         self.write32(self.MIIDA, miida)
+        timeout = time.monotonic() + 0.1
         while self.read32(self.MIIDA) & self.MIIDA_BUSY:
-            pass
+            if time.monotonic() >= timeout:
+                print("MDIO transfer timed out")
+                break
 
     def mdio_read(self, phy, reg):
         self.mdio_do(phy, reg, False)
