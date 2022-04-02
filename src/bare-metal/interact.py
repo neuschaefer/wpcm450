@@ -327,6 +327,14 @@ class Clocks(Block):
         self.set_sel(self.CLKSEL_CPU_SHIFT, 'pll1')
         print(f"AHB3 now at {self.rate_ahb3()}")
 
+    def make_ahb3_fast(self):
+        ahb = self.rate_ahb()
+        for div in [1, 2, 4, 8]:
+            if ahb / div <= 60_000000:
+                self.set_div(self.CLKDIV_AHB3_SHIFT, div)
+                break
+        print(f"AHB3 clock now at {self.rate_ahb3()} Hz")
+
 
 class SHM(Block):
     def dump(self):
