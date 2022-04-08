@@ -152,8 +152,9 @@ class Lolmon:
     def readX(self, cmd, size, addr, num):
         output = self.run_command("%s %08x %d" % (cmd, addr, num))
         a = self.parse_r_output(output)
-        if num == 1: return a[0]
-        else:        return bytes(a)
+        if num == 1:  return a[0]
+        elif size==1: return bytes(a)
+        else:         return a
 
     def read8(self, addr, num=1):  return self.readX('rb', 1, addr, num)
     def read16(self, addr, num=1): return self.readX('rh', 2, addr, num)
