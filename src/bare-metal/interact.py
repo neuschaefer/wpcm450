@@ -121,6 +121,9 @@ class Lolmon:
             f.close()
             self.write8(addr, data)
 
+    def flash(self, memaddr, flashaddr, size):
+        self.run_command("fl %08x %08x %#x" % (memaddr, flashaddr, size))
+
     def memset(self, addr, value, size):
         value16 = value << 8 | value
         value32 = value16 << 16 | value16
