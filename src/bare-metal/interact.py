@@ -339,6 +339,11 @@ class Clocks(Block):
                 break
         print(f"AHB3 clock now at {self.rate_ahb3()} Hz")
 
+    def make_cpu_24mhz(self):
+        self.set_div(self.CLKDIV_AHB_SHIFT, 1)
+        self.set_div(self.CLKDIV_APB_SHIFT, 1)
+        clk.set_sel(clk.CLKSEL_CPU_SHIFT, 'ref')
+
 
 class SHM(Block):
     def dump(self):
@@ -774,6 +779,7 @@ class EMC(Block):
         with open(filename, 'rb') as f:
             data = f.read()
             f.close()
+            print("Size: %#x bytes" % len(data))
             self.push_data(addr, data)
 
     def get_mdccr(self):
@@ -817,6 +823,7 @@ class GCR(Block):
     PWRON = 4
     MFSEL1 = 0xc
     MFSEL2 = 0x10
+
 
 class FIU(Block):
     FIU_CFG = 0
@@ -1048,8 +1055,29 @@ class FIU(Block):
                         self.set_uma_addr(0x112233)
                         self.safe_uma(code, write, use_addr, data_len)
 
+    def make_fast(self):
+        clk.make_ahb3_fast()
+        self.set_read_burst(16)
+        self.setclr32(0x14, 6, 1)
 
-MC = USB = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
+
+class MC(Block):
+    RESET_VALUES = [
+        0x23128300, 0x11122224, 0x40000443, 0x00000000, # +0x00
+        0x0000000d, 0x00150202, 0x00000000, 0x00000000, # +0x10
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, # +0x20
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, # +0x30
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, # +0x40
+        0x00000000, 0x00000000, 0x00000000, 0x00000000, # +0x50
+        0x00000006, 0x00000006                          # +0x60
+    ]
+
+    def apply_reset_values(self):
+        for i, value in enumerate(self.RESET_VALUES):
+            self.write32(4 * i, value)
+
+
+USB = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
 PECI = GFXI = SSPI = Timers = AIC = GPIO = ADC = SDHC = ROM = Block
 
 
