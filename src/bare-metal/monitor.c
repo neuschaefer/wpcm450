@@ -292,6 +292,17 @@ static bool parse_int(const char *s, uint32_t base, uint32_t *result)
 #define CTS_A_SIZE	BIT(3)
 #define CTS_D_SIZE_SHIFT 0
 
+static void fiu_init(void)
+{
+	/*
+	 * TODO:
+	 * - maximize AHB3 ≤ 65 MHz
+	 * - set BURST_CFG.R_BURST = 0b11 (16 bytes read burst)
+	 * - set SPI_FL_CFG.F_READ = 1 (fast read)
+	 * - set SPI_TIM = 0x0b
+	 */
+}
+
 static void fiu_set_uma_code(uint8_t code)
 {
 	write8(FIU_UMA_CODE, code);
@@ -947,6 +958,7 @@ void main(void)
 {
 	watchdog_disable();
 	uart_init();
+	fiu_init();
 
 	puts("Press any key to avoid running the default boot script");
 	if (!wait_for_key(1000000)) {
