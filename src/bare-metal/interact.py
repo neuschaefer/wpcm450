@@ -1077,8 +1077,53 @@ class MC(Block):
             self.write32(4 * i, value)
 
 
+class Timers(Block):
+    TCSR = [ 0x00, 0x04, 0x20, 0x24, 0x40 ]
+    TICR = [ 0x08, 0x0c, 0x28, 0x2c, 0x48 ]
+    TDR  = [ 0x10, 0x14, 0x30, 0x34, 0x50 ]
+    TISR = 0x18
+    WTCR = 0x1c
+
+    TCSR_PRESCALE_MASK = 0xff
+    TCSR_CACT   = BIT(25)
+    TCSR_CRST   = BIT(26)
+    TCSR_PER    = BIT(27)
+    TCSR_IE     = BIT(29)
+    TCSR_CEN    = BIT(30)
+    TCSR_FREEZE = BIT(31)
+
+    def summary(self):
+        for i in range(5):
+            tcsr = self.read32(self.TCSR[i])
+            ticr = self.read32(self.TICR[i])
+            tdr  = self.read32(self.TDR[i])
+            print("Timer %d: %08x %9d %9d" % (i, tcsr, ticr, tdr))
+        tisr = self.read32(self.TISR)
+        wtcr = self.read32(self.WTCR)
+        print("TISR: %08x,  WTCR: %08x" % (tisr, wtcr))
+
+    def testmode(self):
+        for i in range(5):
+            self.write32(self.TICR[i], 1000000)
+            self.write32(self.TCSR[i], 239 | self.TCSR_CACT | self.TCSR_PER | self.TCSR_CEN)
+
+    def is_decrementing(self, timer):
+        a = self.read32(self.TDR[timer])
+        b = self.read32(self.TDR[timer])
+        return a != b
+
+    def test_clock_gates(self):
+        self.testmode()
+        for gate in [19, 20, 21, 22, 23]:
+            clk.clken(gate, False)
+
+        for gate in [19, 20, 21, 22, 23]:
+            clk.clken(gate, True)
+            print(gate, [int(self.is_decrementing(i)) for i in range(5)])
+
+
 USB = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
-PECI = GFXI = SSPI = Timers = AIC = GPIO = ADC = SDHC = ROM = Block
+PECI = GFXI = SSPI = AIC = GPIO = ADC = SDHC = ROM = Block
 
 
 l = Lolmon('/dev/ttyUSB0')
