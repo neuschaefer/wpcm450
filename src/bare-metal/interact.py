@@ -1055,6 +1055,13 @@ class FIU(Block):
                         self.set_uma_addr(0x112233)
                         self.safe_uma(code, write, use_addr, data_len)
 
+    def uma_addr_test(self):
+        self.set_uma_code(0x03)
+        self.write8(self.UMA_AB0, 0xaa)
+        self.write8(self.UMA_AB1, 0xbb)
+        self.write8(self.UMA_AB2, 0xcc)
+        self.do_uma(False, True, 1)
+
     def make_fast(self):
         clk.make_ahb3_fast()
         self.set_read_burst(16)
