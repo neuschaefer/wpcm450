@@ -439,6 +439,18 @@ class EMC(Block):
     DMARFC = 0xa8
     MIEN = 0xac
     MISTA = 0xb0
+    MISTA_RX_MASK = 0x0000ffff
+    MISTA_TX_MASK = 0xffff0000
+    MISTA_RXINTR = BIT(0)
+    MISTA_RXGD = BIT(4)
+    MISTA_RDU = BIT(10)
+    MISTA_RXBERR = BIT(11)
+    MISTA_TXINTR = BIT(16)
+    MISTA_TXCP = BIT(18)
+    MISTA_EXDEF = BIT(19)
+    MISTA_TXABT = BIT(21)
+    MISTA_TDU = BIT(23)
+    MISTA_TXBERR = BIT(24)
     MGSTA = 0xb4
     MPCNT = 0xb8
     MRPC = 0xbc
@@ -733,28 +745,63 @@ class EMC(Block):
 
     def get_tx_buf(self):
         buf = self.tx_bufs[self.tx_head]
-        while True:
+        for i in range(100):
             buf.fetch_status()
             if buf.status.is_ready():
+                self.advance_tx()
+                return buf
+        print(f'EMC.get_tx_buf timed out! Status: {buf.status}')
+
+    def perform_tx(self):
+        # TX interrupts
+        self.write32(self.MISTA, self.MISTA_TX_MASK)
+
+        # Trigger TX
+        self.write32(self.TSDR, 1)
+
+        looking_for = self.MISTA_TDU | self.MISTA_TXBERR
+        for i in range(100):
+            if self.read32(self.MISTA) & looking_for:
                 break
-        self.advance_tx()
-        return buf
+        else:
+            print(f'TX timeout, MISTA = {self.read32(self.MISTA):08x}')
+
+        # Determine new TX head
+        ctxdsa = self.read32(self.CTXDSA)
+        real_tx_head = [i for i, tx in enumerate(emc0.tx_bufs) if tx.base == ctxdsa][0]
+
+        if self.read32(self.MISTA) & self.MISTA_TXBERR:
+            # TX DMA error.  In this case, there are descriptors that were
+            # previously assigned to the EMC, but not processed and hence not
+            # assigned back to the CPU.
+            #
+            # I was originally going to rearm reassign these descriptors to the CPU,
+            # set self.tx_head to what CTXDSA says, and move on. But, although
+            # this solution *should* work, it does not.
+            #
+            # So, we reinitialize the driver and hardware here.
+            print('TX DMA error, reinitializing EMC!')
+            self.init()
+            return False
+        else:
+            return True
 
     def submit_tx_buf(self, buf):
         buf.submit()
-        self.write32(self.TSDR, 1)
+        return self.perform_tx()
 
     def tx_frame(self, data):
         buf = self.get_tx_buf()
         buf.set_data(data)
-        self.submit_tx_buf(buf)
+        return self.submit_tx_buf(buf)
 
     # Read memory using the EMC's DMA view
     def dma_read(self, addr, length=1024):
         self.setclr32(self.MCMDR, 21, 1) # Enable loopback mode
         buf = self.get_tx_buf()
         buf.set_data_dma(addr, length)
-        self.submit_tx_buf(buf)
+        if not self.submit_tx_buf(buf):
+            return
         if not buf.wait_until_ready():
             return
         print(buf.status)
