@@ -4,6 +4,10 @@
 
 import serial, time, re, struct, sys, random, socket, os
 
+KiB = 1 << 10
+MiB = 1 << 20
+GiB = 1 << 30
+
 def BIT(x):
     return 1 << x
 
@@ -24,6 +28,16 @@ def get_be16(data, offset):
 
 def get_be32(data, offset):
     return get_be16(data, offset) << 16 | get_be16(data, offset+2)
+
+def hexdump(data):
+    if data:
+        for offset in range(0, len(data), 16):
+            d = data[offset:offset+16]
+            line = f'{offset:08x}:  '
+            line += ' '.join([f'{x:02x}' for x in d]).ljust(49)
+            line += ''.join([chr(x) if (x >= 0x20 and x <= 0x7f) else '.' for x in d])
+            print(line)
+
 
 class Lolmon:
     def __init__(self, device):
