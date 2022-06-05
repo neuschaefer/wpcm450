@@ -551,6 +551,10 @@ class EMC(Block):
                 self.c = c
                 self.sl = sl
 
+            def __repr__(self):
+                owner = 'EMC' if self.c == self.CONTROL_OWNER_EMC else 'ARM'
+                return 'TXBuf.Status(%s, c=0x%08x, sl=0x%08x)' % (owner, self.c, self.sl)
+
             def is_ready(self):
                 return not(self.c & self.CONTROL_OWNER_EMC)
 
@@ -567,6 +571,13 @@ class EMC(Block):
             self.status = self.Status(self.l.read32(self.base + self.CONTROL),
                                       self.l.read32(self.base + self.SL))
 
+        def wait_until_ready(self):
+            for i in range(100):
+                self.fetch_status()
+                if self.status.is_ready():
+                    return True
+            print(f'TXBuf.wait_until_ready: Timed out! status = {self.status}')
+
         def submit(self):
             self.l.write32(self.base + self.SL, self.len)
             self.l.write32(self.base + self.CONTROL, self.CONTROL_GO)
@@ -578,6 +589,10 @@ class EMC(Block):
         def set_data_by_copy(self, addr, length):
             self.len = length
             self.l.copy8(self.data_base, addr, length)
+
+        def set_data_dma(self, addr, length):
+            self.l.write32(self.base + self.BUF_ADDR, addr)
+            self.len = length
 
         def dump_data(self):
             self.l.dump8(self.data_base, self.len)
@@ -700,6 +715,15 @@ class EMC(Block):
         buf.rearm()
         return data
 
+    # try to receive a frame, as data, or return None
+    def try_rx_frame(self):
+        data = None
+        buf = self.try_get_rx_buf()
+        if buf:
+            data = buf.fetch_data()
+            buf.rearm()
+        return data
+
     def dump_frames(self):
         while True:
             buf = self.get_rx_buf()
@@ -724,6 +748,31 @@ class EMC(Block):
         buf = self.get_tx_buf()
         buf.set_data(data)
         self.submit_tx_buf(buf)
+
+    # Read memory using the EMC's DMA view
+    def dma_read(self, addr, length=1024):
+        self.setclr32(self.MCMDR, 21, 1) # Enable loopback mode
+        buf = self.get_tx_buf()
+        buf.set_data_dma(addr, length)
+        self.submit_tx_buf(buf)
+        if not buf.wait_until_ready():
+            return
+        print(buf.status)
+        data = self.try_rx_frame()
+        if data:
+            return data
+        else:
+            print("no data received!")
+
+    def dma_compare(self, addr, length=1024):
+        dma = self.dma_read(addr, length)
+        direct = l.read8(addr, length)
+        if (dma):
+            if direct != dma:
+                print(f'\nMismatch! CPU read @ 0x{addr:08x}:')
+                hexdump(direct)
+                print(f'DMA read @ {addr:08x}:')
+                hexdump(dma)
 
     def data_chunks(self, data):
         ETH_OVERHEAD = 14
