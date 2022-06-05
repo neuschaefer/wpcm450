@@ -665,6 +665,29 @@ class EMC(Block):
 
         self.make_arp_packet(self.ARP_BASE)
 
+    def fast_reset(self):
+        # Rearm descriptors that were missed
+        ctxdsa = self.read32(self.CTXDSA)
+        real_tx_head = [i for i, tx in enumerate(emc0.tx_bufs) if tx.base == ctxdsa][0]
+        head = real_tx_head
+        while head != self.tx_head:
+            self.tx_bufs[head].write_initial()
+            head = (head + 1) % len(self.tx_bufs)
+
+        #for desc in self.tx_bufs: desc.write_initial()
+        self.rx_head = 0
+
+        # Reset EMC
+        self.write32(self.MCMDR, self.MCMDR_SWR)
+
+        # Initialize registers
+        self.write32(self.CAMCMR, self.CAMCMR_DEFAULT)
+        self.write32(self.TXDLSA, self.tx_bufs[self.tx_head].base)
+        self.write32(self.RXDLSA, self.rx_bufs[self.rx_head].base)
+        self.write32(self.DMARFC, self.FRAME_SIZE)
+        self.write32(self.MCMDR, self.MCMDR_ACTIVE)
+
+
     def make_arp_packet(self, addr):
         b = b''
 
@@ -779,9 +802,8 @@ class EMC(Block):
             # set self.tx_head to what CTXDSA says, and move on. But, although
             # this solution *should* work, it does not.
             #
-            # So, we reinitialize the driver and hardware here.
-            print('TX DMA error, reinitializing EMC!')
-            self.init()
+            # So, we reinitialize the hardware here.
+            self.fast_reset()
             return False
         else:
             return True
@@ -801,6 +823,7 @@ class EMC(Block):
         buf = self.get_tx_buf()
         buf.set_data_dma(addr, length)
         if not self.submit_tx_buf(buf):
+            print('TX DMA error')
             return
         if not buf.wait_until_ready():
             return
