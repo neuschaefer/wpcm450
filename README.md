@@ -8,8 +8,9 @@
   - [linux](./src/linux): Tools that run under Linux
 - My Linux patches are in [neuschaefer/linux](https://github.com/neuschaefer/linux/tree/wpcm)
 
-Hardware documentation is [in the wiki](https://github.com/neuschaefer/wpcm450/wiki/).
+Hardware documentation is [in the wiki](https://github.com/neuschaefer/wpcm450/wiki/) ([GitLab mirror](https://gitlab.com/neuschaefer/wpcm450/-/wikis/home)).
 
+This reposity is available on [GitHub](https://github.com/neuschaefer/wpcm450/) and [GitLab](https://gitlab.com/neuschaefer/wpcm450/)
 
 To discuss a specific mainboard, please find the corresponding
 [issue](https://github.com/neuschaefer/wpcm450/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+board%22)
