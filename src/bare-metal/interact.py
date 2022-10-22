@@ -1200,6 +1200,23 @@ class FIU(Block):
         self.set_read_burst(16)
         self.setclr32(0x14, 6, 1)
 
+    def cs3test(self, i):
+        # Trying to figure out what determines the output level of CS3 aka. GPIO 2.2
+        # Possible influences:
+        #  - FIU state, UMA_ECTS bit 3
+        #  - GPIO 2.2 direction
+        #  - GPIO 2.2 dataout
+        #  - MFSEL1.5: SCS3SEL
+        # Conclusion:
+        #  - When SCS3SEL is zero, then FIU state is used
+        #  - When SCS3SEL is one,  then GPIO state is used
+
+        print(f'{i:020b}')
+        fiu.setclr8(fiu.UMA_ECTS, 3, not(i & BIT(0)))
+        gpio.write(2, 2, i & BIT(1))
+        gpio.set_dir(2, 2, i & BIT(2))
+        gcr.setclr32(gcr.MFSEL1, 5, i & BIT(3))
+
 
 class MC(Block):
     RESET_VALUES = [
@@ -1261,9 +1278,47 @@ class Timers(Block):
             clk.clken(gate, True)
             print(gate, [int(self.is_decrementing(i)) for i in range(5)])
 
+class GPIO(Block):
+    COUNTS  = [ 16,   16,   16,   16,   16,   16,   18,   14   ]
+    CFG0    = [ 0x14, 0x24, 0x3c, 0x50, 0x64, 0x78, None, 0x90 ]
+    DATAOUT = [ 0x1c, 0x34, 0x48, 0x5c, 0x70, 0x84, None, 0x9c ]
+    DATAIN  = [ 0x20, 0x38, 0x4c, 0x60, 0x74, 0x88, 0x8c, 0xa0 ]
+
+    def dump(self):
+        self.l.dump32(self.base, 0x40)
+
+    def dump_well(self):
+        def g(bank, offset):
+            if self.get_dir(bank, offset):
+                return f'W{self.get_dataout(bank, offset)}'
+            else:
+                return f'R{self.read(bank, offset)}'
+
+        for bank in range(8):
+            print(f'Bank {bank}: ' + ' '.join([g(bank, i) for i in range(self.COUNTS[bank])]))
+
+    def make_get(regs):
+        def get(self, bank, offset):
+            if regs[bank]:
+                return 0 + bool(self.read32(regs[bank]) & BIT(offset))
+            else:
+                return 0
+        return get
+
+    read = make_get(DATAIN)
+    get_dataout = make_get(DATAOUT)
+    get_dir = make_get(CFG0)
+
+    def write(self, bank, offset, value):
+        self.setclr32(self.DATAOUT[bank], offset, value)
+
+    def set_dir(self, bank, offset, value):
+        self.setclr32(self.CFG0[bank], offset, value)
+
+
 
 USB = KCS = GDMA = AES = UART = SMB = PWM = MFT = Block
-PECI = GFXI = SSPI = AIC = GPIO = ADC = SDHC = ROM = Block
+PECI = GFXI = SSPI = AIC = ADC = SDHC = ROM = Block
 
 
 l = Lolmon('/dev/ttyUSB0')
