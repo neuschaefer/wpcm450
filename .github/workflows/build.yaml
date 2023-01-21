@@ -8,4 +8,4 @@ jobs:
       - run: |
           sudo apt-get update
           sudo apt-get install -y gcc-arm-linux-gnueabi
-          make
+      - run: make
