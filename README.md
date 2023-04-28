@@ -6,6 +6,7 @@
     program that lets you peek, poke and copy memory, as well as run code.
     It can also act as a primitive bootloader.
   - [linux](./src/linux): Tools that run under Linux
+  - [dellfw](./src/dellfw): Tools that help with reverse-engineering Dell firmware
 - My Linux patches are in [neuschaefer/linux](https://github.com/neuschaefer/linux/tree/wpcm)
 
 Hardware documentation is [in the wiki](https://github.com/neuschaefer/wpcm450/wiki/) ([GitLab mirror](https://gitlab.com/neuschaefer/wpcm450/-/wikis/home), [Codeberg mirror](https://codeberg.org/neuschaefer/wpcm450/wiki/Home)).
