@@ -1,0 +1,4 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+
+exec microcom -s 115200 /dev/ttyS1

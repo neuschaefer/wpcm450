@@ -1,0 +1,1 @@
+#source "$BR2_EXTERNAL_LOLBMC_PATH/package/package1/Config.in"

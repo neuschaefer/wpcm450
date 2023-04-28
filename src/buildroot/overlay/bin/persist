@@ -1,0 +1,19 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+set -e
+
+PERSIST_DIR=/rwfs/persist
+
+if [ ! -d $PERSIST_DIR ]; then
+	echo "Persistence directory $PERSIST_DIR doesn't exist!"
+	exit 1
+fi
+
+for file in "$@"; do
+	real="$(realpath "$file")"
+	echo "> $real"
+	mkdir -p "$PERSIST_DIR/$(dirname "$real")"
+	cp -a "$real" "$PERSIST_DIR/$real"
+done
+
+sync

@@ -1,0 +1,113 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+
+GPIO_POWER="$(gpiofind power-chassis-control-n)"
+GPIO_GOOD="$(gpiofind power-chassis-good)"
+GPIO_RESET="$(gpiofind host-reset-control-n)"
+
+help()
+{
+	echo "power  -  Host power management"
+	echo
+	echo "  power [status] - Checks the host power status"
+	echo "  power on       - Turns the host power on"
+	echo "  power off      - Turns the host power off (gently)"
+	echo "  power kill     - Turns the host power off (hard)"
+	echo "  power cycle    - Turns the host power off and on again"
+}
+
+
+# "SC2086 (info): Double quote to prevent globbing and word splitting."
+# We gpiofind prints the gpiochip name and the offset, as two words, and
+# gpioget/set expects them as two parameters, so we actually want word
+# splitting here.
+
+# shellcheck disable=SC2086
+power_status()
+{
+	case "$(gpioget $GPIO_GOOD)" in
+		0) echo off ;;
+		1) echo on ;;
+	esac
+}
+
+# shellcheck disable=SC2086
+power_boop()
+{
+	gpioset $GPIO_POWER=0
+	sleep 0.1
+	gpioset $GPIO_POWER=1
+}
+
+# shellcheck disable=SC2086
+power_force_off()
+{
+	gpioset $GPIO_POWER=0
+	sleep 5
+	gpioset $GPIO_POWER=1
+}
+
+# shellcheck disable=SC2086
+reset_boop()
+{
+	gpioset $GPIO_RESET=0
+	sleep 0.1
+	gpioset $GPIO_RESET=1
+}
+
+wait_until()
+{
+	target="$1"
+	while :; do
+		if [ "$(power_status)" = "$target" ]; then break; fi
+		printf '.'
+		sleep 1
+	done
+	echo
+}
+
+power_on()
+{
+	printf 'power on'
+	if [ "$(power_status)" = "off" ]; then
+		power_boop
+	fi
+	wait_until on
+}
+
+power_off()
+{
+	printf 'power off'
+	if [ "$(power_status)" = "on" ]; then
+		power_boop
+	fi
+	wait_until off
+}
+
+power_kill()
+{
+	if [ "$(power_status)" = "on" ]; then
+		power_force_off
+	fi
+}
+
+power_cycle()
+{
+	power_off
+	power_on
+}
+
+main()
+{
+	case "$1" in
+		''| \
+		status) power_status ;;
+		on)	power_on ;;
+		off)	power_off ;;
+		kill)	power_kill ;;
+		cycle)	power_cycle ;;
+		*)	help ;;
+	esac
+}
+
+main "$@"

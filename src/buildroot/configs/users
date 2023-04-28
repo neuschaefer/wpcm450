@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: MIT
+
+bmc -2 bmc -2 - - /bin/sh dialout BMC user
+sol -2 sol -2 - - /bin/sol dialout SOL user

@@ -1,0 +1,41 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+set -e
+
+PERSIST_DIR=/rwfs/persist
+
+die()
+{
+	echo "$@"
+	exit 1
+}
+
+find_rwfs()
+{
+	while read -r dev _ _ name; do
+		if [ "$name" = '"rwfs"' ]; then
+			echo "$dev" | cut -d: -f1
+		fi
+	done < /proc/mtd
+}
+
+mount_rwfs()
+{
+	MTD="$(find_rwfs | sed -e s/mtd/mtdblock/)"
+	mkdir /rwfs
+	mount -t jffs2 "/dev/$MTD" /rwfs
+}
+
+restore()
+{
+	mkdir -p "$PERSIST_DIR"
+	cp -a "$PERSIST_DIR"/* /
+}
+
+case "$1" in
+	start)
+		mount_rwfs && restore
+		;;
+	*)
+		;;
+esac
