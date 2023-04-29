@@ -1,0 +1,21 @@
+name: lolbmc
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: |
+          cd src/buildroot
+          wget https://buildroot.org/downloads/buildroot-2023.02.tar.gz
+          tar xf buildroot-*.tar.gz && rm buildroot-*.tar.gz
+          ln -s buildroot-* buildroot
+      - run: |
+          cd src/buildroot
+          ./make.sh lolbmc_defconfig
+          ./make.sh -j$(nproc || echo 1)
+      - uses: actions/upload-artifact@v3
+        with:
+          name: zimage
+          path: |
+            src/buildroot/out/images
