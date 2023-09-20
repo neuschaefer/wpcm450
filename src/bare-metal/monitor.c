@@ -846,18 +846,22 @@ beginning:
 	}
 }
 
-static size_t tokenize_line(char *line, char **argv, size_t argv_length)
+static size_t tokenize_line(char **line, char **argv, size_t argv_length)
 {
 	enum { IDLE, WORD } state = IDLE;
 	size_t argv_index = 0;
-	char *word_start = NULL;
+	char *word_start = NULL, *p;
 
-	for (char *p = line; *p && argv_index < argv_length; p++) {
+	for (p = *line; *p && argv_index < argv_length; p++) {
 		char c = *p;
 
-		/* Find the beginning of a comment, ignore all word after */
-		if(c == '#')
+		/* Once we reach a comment or semicolon, the command is over */
+		if(c == '#' || c == ';') {
+			*p = 0;
+			if (c == ';')
+				p++;
 			break;
+		}
 
 		switch (state) {
 		case IDLE:
@@ -879,32 +883,40 @@ static size_t tokenize_line(char *line, char **argv, size_t argv_length)
 		}
 	}
 
+	/* Update line point for the caller */
+	*line = p;
+
 	if (word_start && argv_index < argv_length)
 		argv[argv_index++] = word_start;
 
 	return argv_index;
 }
 
+/* Execute a single line, which may contain multiple commands separated by semicolon */
 static void execute_line(char *line)
 {
 	char *argv[16];
 	int argc;
 	const struct command *cmd;
 
-	argc = tokenize_line(line, argv, ARRAY_LENGTH(argv));
-	if (argc == 0)
-		return;
+	while (true) {
+		argc = tokenize_line(&line, argv, ARRAY_LENGTH(argv));
+		if (argc == 0)
+			return;
 
-	cmd = find_command(argv[0]);
-	if (!cmd) {
-		putstr("Unknown command ");
-		puts(argv[0]);
-		return;
+		cmd = find_command(argv[0]);
+		if (!cmd) {
+			putstr("Unknown command ");
+			puts(argv[0]);
+			return;
+		}
+
+		cmd->function(argc, argv);
 	}
-
-	cmd->function(argc, argv);
 }
 
+/* Execute a command script that may be stored in read-only memory,
+   and may consist of multiple lines */
 static void source(const char *script)
 {
 	char line[128];
