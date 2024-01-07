@@ -9,4 +9,7 @@ src:
 clean:
 	+$(MAKE) -C src clean
 
+lint:
+	reuse lint
+
 .PHONY: src clean
