@@ -6,12 +6,11 @@ AS := $(CROSS_COMPILE)as
 CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
 ASFLAGS :=
-MKIMAGE := ../../tools/mkimage
 LOLCONV := ../../tools/lolconv
 CFLAGS  := -Os -fno-builtin -nostdlib -Wall -Wno-unused-function -Wno-main
 LDFLAGS := -T monitor.ld
 
-all: scream.img monitor.img tlbtest.lol getuartdiv.lol monitor-flash.bin \
+all: tlbtest.lol getuartdiv.lol monitor-flash.bin \
 	monitor-flash-16m.bin monitor-flash-32m.bin
 
 
@@ -44,12 +43,6 @@ MONITOR_OBJS = start.o monitor.o bootscript.elf
 monitor.elf: $(MONITOR_OBJS) monitor.ld
 	$(LD) $(LDFLAGS) $(MONITOR_OBJS) -o $@
 
-scream.img: scream.bin
-	$(MKIMAGE) -acx -b 0x40b00000 -l 0x8000 -e 0x8000 -n scream -u 6 -i $< -o $@
-
-monitor.img: monitor.bin
-	$(MKIMAGE) -acx -b 0x40b00000 -l 0x6400000 -e 0x6400000 -n monitor -u 6 -i $< -o $@
-
 monitor-flash.bin: monitor.bin
 	(printf 'P\004U\252'; cat $+) > $@
 
@@ -62,6 +55,6 @@ monitor-flash-32m.bin: monitor-flash.bin
 	truncate -s 32M $@
 
 clean:
-	rm -f *.o scream.elf scream.bin scream.img \
-	          monitor.elf monitor.bin monitor.img bootscript.elf bootscript.tmp \
+	rm -f *.o scream.elf scream.bin \
+	          monitor.elf monitor.bin bootscript.elf bootscript.tmp \
 		  monitor-flash.bin monitor-flash-16m.bin monitor-flash-32m.bin
