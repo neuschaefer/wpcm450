@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (C) J. Neuschäfer
 /*
  * memdump - dump a memory range to stdout
  * Usage: memdump START_ADDRESS SIZE

@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MIT
+// Copyright (C) J. Neuschäfer
+//
 // trace.so - an ioctl tracer for iDRAC6's fullfw process
 #define _GNU_SOURCE
 #include <errno.h>

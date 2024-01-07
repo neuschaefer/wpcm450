@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
+
 .PHONY: clean uuencode
 
 trace.so: trace.c

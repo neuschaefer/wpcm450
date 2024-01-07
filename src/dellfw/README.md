@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (C) J. Neuschäfer -->
+
 # Dell iDRAC6 firmware tools
 
 The main thing here is `trace.so`, which can be `LD_PRELOAD`-ed into the

@@ -1,5 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
+#
 # Apply the patches from an AMI GPL source package to a git repo
 set -e
 

@@ -1,4 +1,7 @@
 #!/usr/bin/python3
+# SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
+
 # convert a binary into a script for lolmon
 # Usage: lolconv 0x1000 foo.bin
 import argparse

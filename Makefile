@@ -1,13 +1,12 @@
-src: tools
+# SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
+
+src:
 	+$(MAKE) -C src/bare-metal
 	+$(MAKE) -C src/linux
 	+$(MAKE) -C src/dellfw
 
-tools:
-	+$(MAKE) -C tools
-
 clean:
 	+$(MAKE) -C src clean
-	+$(MAKE) -C tools clean
 
-.PHONY: src tools clean
+.PHONY: src clean

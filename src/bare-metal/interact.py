@@ -1,5 +1,7 @@
 #!/usr/share/python3
 # SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
+
 # Usage: python3 -i ./interact.py
 
 import serial, time, re, struct, sys, random, socket, os

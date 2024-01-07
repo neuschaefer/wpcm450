@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
 import argparse
 
 parser = argparse.ArgumentParser(description='generate a flash page with the ATEN symbol in it')

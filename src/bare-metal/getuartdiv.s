@@ -1,4 +1,6 @@
-	# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
+
 	# Retrieve the baud rate divisor of UART0 and UART1
 	# Assumes UART0 @ 0xb8000000, UART1 @ 0xb8000100
 	# Stores the divisors at 0x0 (UART0), 0x4 (UART1)

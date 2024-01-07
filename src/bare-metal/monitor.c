@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: MIT */
+// SPDX-License-Identifier: MIT
+// Copyright (C) J. Neuschäfer
 
 #include <stdint.h>
 #include <stdbool.h>

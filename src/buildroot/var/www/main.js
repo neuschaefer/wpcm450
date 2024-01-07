@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (C) J. Neuschäfer
+
 function setThisHost(host) {
 	var ee = document.getElementsByClassName("thishost");
 	var elist = [];

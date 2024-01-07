@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (C) J. Neuschäfer
 /*
  * A program to manage host power state on Supermicro X9 boards.
  */

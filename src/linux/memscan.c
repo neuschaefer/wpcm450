@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+// Copyright (C) J. Neuschäfer
 /*
  * memscan - scan a range in /dev/mem for changes
  * Usage: memscan START_ADDRESS SIZE

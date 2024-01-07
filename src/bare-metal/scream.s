@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
+
         # scream on the debug uart.
 .global _start
 _start:

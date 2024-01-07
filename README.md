@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (C) J. Neuschäfer -->
+
 # Third-party tools and documentation for the Nuvoton WPCM450 BMC
 
 - [tools](./tools/): Tools that run on any workstation

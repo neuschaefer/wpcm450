@@ -1,5 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
 #
 # run-fullfw.sh - Script that runs fullfw with tracing, and makes sure
 # AppMonitor doesn't get upset.

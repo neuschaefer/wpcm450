@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
 #
 # Turn LCD commands in trace logs into an animated GIF
 import re, sys

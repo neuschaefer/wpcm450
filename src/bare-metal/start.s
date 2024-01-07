@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
 
 .global _start
 _start:

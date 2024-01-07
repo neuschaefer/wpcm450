@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
 
 CROSS_COMPILE := arm-linux-gnueabi-
 OBJCOPY := $(CROSS_COMPILE)objcopy

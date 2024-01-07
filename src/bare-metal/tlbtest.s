@@ -1,4 +1,6 @@
-	# SPDX-License-Identifier: MIT
+# SPDX-License-Identifier: MIT
+# Copyright (C) J. Neuschäfer
+
 	# TLB flush operation test program
 	# to see if anything hangs the system
 .global	_start
