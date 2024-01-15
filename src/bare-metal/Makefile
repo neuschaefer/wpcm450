@@ -8,7 +8,7 @@ CC := $(CROSS_COMPILE)gcc
 LD := $(CROSS_COMPILE)ld
 ASFLAGS :=
 LOLCONV := ../../tools/lolconv
-CFLAGS  := -Os -fno-builtin -nostdlib -Wall -Wno-unused-function -Wno-main
+CFLAGS  := -Os -fno-builtin -nostdlib -Wall -Wno-unused-function -Wno-main -ggdb
 LDFLAGS := -T monitor.ld
 
 all: tlbtest.lol getuartdiv.lol monitor-flash.bin \
